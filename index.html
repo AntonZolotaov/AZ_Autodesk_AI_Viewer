@@ -157,6 +157,7 @@
     }
   </style>
 </head>
+
 <body>
   <div id="viewer-container">
     <div id="header-logo" class="glass-panel shadow-sm">
@@ -168,8 +169,11 @@
     <div id="ai-panel" class="glass-panel shadow-xl p-4 flex flex-col gap-3">
       <div class="flex justify-between items-center border-b border-slate-200 pb-2">
         <h3 class="text-slate-800 font-bold text-sm flex items-center gap-2">
-            <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-            AI BIM Assistant
+          <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+          </svg>
+          AI BIM Assistant
         </h3>
         <span id="ai-status" class="status-text text-slate-500">Ready</span>
       </div>
@@ -182,28 +186,41 @@
       </div>
 
       <div class="relative">
-        <textarea id="ai-input" 
-          class="w-full text-xs p-3 pr-8 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white/80 transition-all shadow-inner" 
-          rows="3" 
+        <textarea id="ai-input"
+          class="w-full text-xs p-3 pr-8 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white/80 transition-all shadow-inner"
+          rows="3"
           placeholder="Ask about model elements, parameters, or project data..."></textarea>
       </div>
-      
+
       <div class="flex flex-wrap gap-2">
-        <button id="btn-ask" class="bg-blue-600 text-white text-xs font-bold px-5 py-2 rounded-lg hover:bg-blue-700 active:scale-95 transition disabled:opacity-50">Ask</button>
-        <button id="btn-selection" class="bg-slate-100 text-slate-700 text-xs px-3 py-2 rounded-lg hover:bg-slate-200 active:scale-95 transition border border-slate-200 flex items-center gap-1">
-            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"></path></svg>
-            Use Selection
+        <button id="btn-ask"
+          class="bg-blue-600 text-white text-xs font-bold px-5 py-2 rounded-lg hover:bg-blue-700 active:scale-95 transition disabled:opacity-50">Ask</button>
+
+        <button id="btn-selection"
+          class="bg-slate-100 text-slate-700 text-xs px-3 py-2 rounded-lg hover:bg-slate-200 active:scale-95 transition border border-slate-200 flex items-center gap-1">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"></path>
+          </svg>
+          Use Selection
         </button>
+
         <button id="btn-clear" class="text-slate-400 text-[11px] px-1 hover:text-slate-600 transition">Clear</button>
-        <button id="btn-highlight" class="ml-auto bg-amber-50 text-amber-600 text-[10px] px-2 py-1 rounded-md border border-amber-100 hidden hover:bg-amber-100 transition">Focus Element</button>
+
+        <button id="btn-highlight"
+          class="ml-auto bg-amber-50 text-amber-600 text-[10px] px-2 py-1 rounded-md border border-amber-100 hidden hover:bg-amber-100 transition">Focus Element</button>
       </div>
 
-      <select id="ai-prompts" class="text-[11px] text-slate-400 bg-transparent border-none focus:ring-0 cursor-pointer hover:text-slate-600 transition-colors">
+      <select id="ai-prompts"
+        class="text-[11px] text-slate-400 bg-transparent border-none focus:ring-0 cursor-pointer hover:text-slate-600 transition-colors">
         <option value="">Quick Prompts...</option>
         <option value="What is this element and what are its primary dimensions?">Identify selected element</option>
         <option value="Summarize the technical specifications for the selected items.">Summarize properties</option>
         <option value="Is there any missing metadata for this selection?">Check for missing data</option>
         <option value="Describe the material composition of these elements.">Material info</option>
+        <option value="Show me windows">Show me windows</option>
+        <option value="Show me doors">Show me doors</option>
+        <option value="Clear isolation and show everything">Clear isolation</option>
       </select>
     </div>
 
@@ -215,10 +232,13 @@
 
   <script>
     // === CONFIG ===
-    const AI_URL = "https://revit-viewer-backend.onrender.com/api/ai";
-    const TOKEN_URL = 'https://revit-viewer-backend.onrender.com/api/auth/token';
-    // FIXED: Removed the '$' typo in the URN path
-    const documentId = 'urn:dXJuOmFkc2sub2JqZWN0czpvcy5vYmplY3Q6YW50b25yZXZpdGJ1Y2tldDIwMjYvYnJ6MDAxLmR3Zng';
+    const BACKEND_BASE = "https://revit-viewer-backend.onrender.com";
+    const AI_URL = `${BACKEND_BASE}/api/ai`;
+    const TOKEN_URL = `${BACKEND_BASE}/api/auth/token`;
+
+    // Your URN (WITHOUT "urn:")
+    const MODEL_URN = "dXJuOmFkc2sub2JqZWN0czpvcy5vYmplY3Q6YW50b25yZXZpdGJ1Y2tldDIwMjYvYnJ6MDAxLmR3Zng";
+    const documentId = `urn:${MODEL_URN}`;
 
     let viewer = null;
     let cachedToken = null;
@@ -226,33 +246,34 @@
     let inflightPromise = null;
     let currentSelectionData = null;
 
-    // === AUTH & INITIALIZATION ===
+    // === AUTH ===
     async function fetchToken() {
       if (inflightPromise) return inflightPromise;
+
       inflightPromise = (async () => {
-        try {
-          const res = await fetch(TOKEN_URL);
-          if (!res.ok) throw new Error(`Auth failed (${res.status})`);
-          const data = await res.json();
-          cachedToken = data.access_token;
-          cachedExpiryMs = Date.now() + (data.expires_in * 1000) - 60000;
-          return data;
-        } catch (err) {
-          console.error('Auth Failed', err);
-          throw err;
-        }
+        const res = await fetch(TOKEN_URL);
+        if (!res.ok) throw new Error(`Auth failed (${res.status})`);
+        const data = await res.json();
+        cachedToken = data.access_token;
+        cachedExpiryMs = Date.now() + (data.expires_in * 1000) - 60000;
+        return data;
       })();
-      try { return await inflightPromise; } finally { inflightPromise = null; }
+
+      try { return await inflightPromise; }
+      finally { inflightPromise = null; }
     }
 
     function getAccessToken(onGetAccessToken) {
       if (cachedToken && Date.now() < cachedExpiryMs) {
         onGetAccessToken(cachedToken, 3600);
       } else {
-        fetchToken().then(data => onGetAccessToken(data.access_token, data.expires_in)).catch(() => onGetAccessToken('', 0));
+        fetchToken()
+          .then(data => onGetAccessToken(data.access_token, data.expires_in))
+          .catch(() => onGetAccessToken('', 0));
       }
     }
 
+    // === VIEWER INIT ===
     function initViewer() {
       const htmlDiv = document.getElementById('forgeViewer');
       if (htmlDiv.clientHeight === 0) { setTimeout(initViewer, 100); return; }
@@ -266,8 +287,8 @@
 
         const startedCode = viewer.start();
         if (startedCode > 0) {
-            console.error('Failed to create a Viewer: WebGL not supported.');
-            return;
+          console.error('Failed to create a Viewer: WebGL not supported.');
+          return;
         }
 
         const resizeObserver = new ResizeObserver(() => { if (viewer && viewer.impl) viewer.resize(); });
@@ -279,18 +300,18 @@
             viewer.setBackgroundColor(248, 250, 252, 248, 250, 252);
           });
         }, (errCode, errMsg) => {
-            console.error('Doc Load Error:', errCode, errMsg);
-            ui.status.innerText = `Load Error ${errCode}`;
-            ui.status.className = "status-text text-red-600";
+          console.error('Doc Load Error:', errCode, errMsg);
+          ui.status.innerText = `Load Error ${errCode}`;
+          ui.status.className = "status-text text-red-600";
         });
 
         viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, (ev) => {
-            ui.zoomBtn.classList.toggle('hidden', ev.dbIdArray.length === 0);
+          ui.zoomBtn.classList.toggle('hidden', ev.dbIdArray.length === 0);
         });
       });
     }
 
-    // === AI ASSISTANT PANEL LOGIC ===
+    // === UI ===
     const ui = {
       input: document.getElementById('ai-input'),
       askBtn: document.getElementById('btn-ask'),
@@ -305,6 +326,7 @@
       zoomBtn: document.getElementById('btn-highlight')
     };
 
+    // === SELECTION CONTEXT ===
     async function getSelectionContext() {
       if (!viewer) return null;
       const dbIds = viewer.getSelection();
@@ -312,16 +334,15 @@
 
       const properties = [];
       const maxToFetch = Math.min(dbIds.length, 10);
-
       const fetchProps = (id) => new Promise(resolve => viewer.getProperties(id, resolve));
 
       for (let i = 0; i < maxToFetch; i++) {
         const data = await fetchProps(dbIds[i]);
         if (!data) continue;
-        
-        const coreParams = data.properties.filter(p => 
-          ['Category', 'Type', 'Level', 'Material', 'Area', 'Volume', 'Height', 'Width'].includes(p.displayName)
-        ).map(p => ({ label: p.displayName, value: p.displayValue }));
+
+        const coreParams = data.properties
+          .filter(p => ['Category', 'Type', 'Level', 'Material', 'Area', 'Volume', 'Height', 'Width'].includes(p.displayName))
+          .map(p => ({ label: p.displayName, value: p.displayValue }));
 
         properties.push({
           dbId: dbIds[i],
@@ -334,6 +355,72 @@
       return { dbIds, count: dbIds.length, properties };
     }
 
+    // === AI -> VIEWER ACTIONS ===
+    function viewerSearch(query) {
+      return new Promise((resolve, reject) => {
+        if (!viewer) return resolve([]);
+        viewer.search(
+          query,
+          (dbIds) => resolve(dbIds || []),
+          (err) => reject(err)
+        );
+      });
+    }
+
+    async function runAiActions(actions) {
+      if (!viewer || !Array.isArray(actions)) return;
+
+      for (const a of actions) {
+        if (!a || !a.type) continue;
+
+        if (a.type === "clear_isolation") {
+          viewer.isolate(0);
+          viewer.select([]);
+          viewer.fitToView();
+          continue;
+        }
+
+        if (a.type === "fit_to_view") {
+          viewer.fitToView();
+          continue;
+        }
+
+        if (a.type === "search_and_isolate") {
+          const q = String(a.query || "").trim();
+          if (!q) continue;
+
+          const dbIds = await viewerSearch(q);
+          if (dbIds.length === 0) {
+            ui.status.innerText = `Not found: ${q}`;
+            ui.status.className = "status-text text-amber-600";
+            continue;
+          }
+
+          viewer.isolate(dbIds);
+          viewer.select(dbIds);
+          viewer.fitToView(dbIds);
+          continue;
+        }
+
+        if (a.type === "search_and_select") {
+          const q = String(a.query || "").trim();
+          if (!q) continue;
+
+          const dbIds = await viewerSearch(q);
+          if (dbIds.length === 0) {
+            ui.status.innerText = `Not found: ${q}`;
+            ui.status.className = "status-text text-amber-600";
+            continue;
+          }
+
+          viewer.select(dbIds);
+          viewer.fitToView(dbIds);
+          continue;
+        }
+      }
+    }
+
+    // === ASK AI ===
     async function handleAsk() {
       const text = ui.input.value.trim();
       if (!text) return;
@@ -349,26 +436,28 @@
           body: JSON.stringify({ text, selection: currentSelectionData })
         });
 
-        if (response.status === 429) {
-          const retry = response.headers.get('Retry-After') || '5';
-          throw new Error(`Rate limited (retry in ${retry}s)`);
-        }
+        if (response.status === 429) throw new Error("Rate limited. Try again in 20s.");
 
-        if (!response.ok) throw new Error("Server communication error.");
+        if (!response.ok) throw new Error(`Server error (${response.status})`);
 
         const data = await response.json();
         if (data.error) throw new Error(data.error);
 
         ui.responseArea.classList.remove('hidden');
-        ui.answer.innerText = data.answer;
-        
+        ui.answer.innerText = data.answer || "(no answer)";
+
         if (data.model) {
           ui.modelBadge.innerText = `Source: ${data.model}`;
           ui.modelInfo.classList.remove('hidden');
         } else {
           ui.modelInfo.classList.add('hidden');
         }
-        
+
+        // ✅ Execute actions from backend
+        if (data.actions && Array.isArray(data.actions)) {
+          await runAiActions(data.actions);
+        }
+
         ui.status.innerText = "Ready";
         ui.status.className = "status-text text-slate-500";
 
@@ -380,6 +469,7 @@
       }
     }
 
+    // === BUTTONS ===
     ui.askBtn.onclick = handleAsk;
 
     ui.selBtn.onclick = async () => {
@@ -413,16 +503,16 @@
     };
 
     ui.prompts.onchange = (e) => {
-      if(e.target.value) {
+      if (e.target.value) {
         ui.input.value = e.target.value;
         ui.prompts.value = "";
       }
     };
 
     ui.zoomBtn.onclick = () => {
-      if(!viewer) return;
+      if (!viewer) return;
       const ids = viewer.getSelection();
-      if(ids.length > 0) {
+      if (ids.length > 0) {
         viewer.isolate(ids);
         viewer.fitToView(ids);
       }
