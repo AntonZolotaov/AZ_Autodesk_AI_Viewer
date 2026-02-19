@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AZ | Autodesk 3D Viewer</title>
+
+  <!-- Autodesk Viewer CSS -->
+  <link rel="stylesheet" href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.108.0/style.min.css" type="text/css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background-color: #f8fafc;
+      font-family: 'Inter', sans-serif;
+    }
+
+    #viewer-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    #forgeViewer {
+      width: 100%;
+      height: 100%;
+      position: absolute; 
+      top: 0;
+      left: 0;
+    }
+
+    /* Premium Overlay UI */
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 0, 0, 0.05);
+      border-radius: 12px;
+    }
+
+    #header-logo {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      pointer-events: auto;
+    }
+
+    .logo-box {
+      background: #3b82f6;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: white;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    /* AI PANEL STYLES */
+    #ai-panel {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 320px;
+      max-height: 85vh;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      pointer-events: auto;
+      transition: all 0.3s ease;
+    }
+
+    #ai-response-area {
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      scrollbar-width: thin;
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+
+    .status-text { font-size: 11px; font-weight: 500; }
+    .model-badge { font-size: 10px; background: rgba(59, 130, 246, 0.1); }
+    
+    .loading-pulse {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .5; }
+    }
+
+    /* CUSTOMIZING THE TOOLBAR */
+    .adsk-viewing-viewer .adsk-toolbar {
+      bottom: 30px !important;
+      background: transparent !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      border: none !important;
+      box-shadow: none !important;
+      left: 50% !important;
+      transform: translateX(-50%) !important;
+      width: auto !important; 
+      max-width: fit-content !important;
+      padding: 0 4px !important;
+    }
+
+    .adsk-button {
+      background-color: transparent !important;
+      background-image: none !important;
+      box-shadow: none !important;
+      border: none !important;
+      transition: transform 0.2s ease !important;
+    }
+
+    .adsk-button .adsk-control-icon {
+      filter: invert(0.2) !important;
+    }
+
+    .adsk-button:hover {
+      background-color: rgba(0, 0, 0, 0.05) !important;
+      transform: translateY(-2px);
+    }
+
+    .adsk-control-group {
+      border-right: 1px solid rgba(0, 0, 0, 0.05) !important;
+      margin: 0 !important;
+    }
+    
+    .adsk-control-group:last-child {
+      border-right: none !important;
+    }
+
+    @media (max-width: 640px) {
+      #header-logo span { display: none; }
+      #ai-panel { 
+        width: calc(100% - 40px); 
+        top: auto; 
+        bottom: 80px; 
+      }
+      .adsk-viewing-viewer .adsk-toolbar { 
+        transform: translateX(-50%) scale(0.8) !important; 
+        bottom: 10px !important; 
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="viewer-container">
+    <div id="header-logo" class="glass-panel shadow-sm">
+      <div class="logo-box">AZ</div>
+      <span class="text-slate-800 font-semibold text-sm tracking-tight">Anton Zolotarov</span>
+    </div>
+
+    <!-- AI PANEL HTML -->
+    <div id="ai-panel" class="glass-panel shadow-xl p-4 flex flex-col gap-3">
+      <div class="flex justify-between items-center border-b border-slate-200 pb-2">
+        <h3 class="text-slate-800 font-bold text-sm flex items-center gap-2">
+            <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            AI BIM Assistant
+        </h3>
+        <span id="ai-status" class="status-text text-slate-500">Ready</span>
+      </div>
+
+      <div id="ai-response-area" class="text-slate-700 bg-white/40 rounded-lg p-3 hidden">
+        <div id="ai-answer"></div>
+        <div id="ai-model-info" class="mt-3 hidden">
+          <span class="model-badge px-2 py-0.5 rounded text-blue-600 font-medium"></span>
+        </div>
+      </div>
+
+      <div class="relative">
+        <textarea id="ai-input" 
+          class="w-full text-xs p-3 pr-8 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white/80 transition-all shadow-inner" 
+          rows="3" 
+          placeholder="Ask about model elements, parameters, or project data..."></textarea>
+      </div>
+      
+      <div class="flex flex-wrap gap-2">
+        <button id="btn-ask" class="bg-blue-600 text-white text-xs font-bold px-5 py-2 rounded-lg hover:bg-blue-700 active:scale-95 transition disabled:opacity-50">Ask</button>
+        <button id="btn-selection" class="bg-slate-100 text-slate-700 text-xs px-3 py-2 rounded-lg hover:bg-slate-200 active:scale-95 transition border border-slate-200 flex items-center gap-1">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"></path></svg>
+            Use Selection
+        </button>
+        <button id="btn-clear" class="text-slate-400 text-[11px] px-1 hover:text-slate-600 transition">Clear</button>
+        <button id="btn-highlight" class="ml-auto bg-amber-50 text-amber-600 text-[10px] px-2 py-1 rounded-md border border-amber-100 hidden hover:bg-amber-100 transition">Focus Element</button>
+      </div>
+
+      <select id="ai-prompts" class="text-[11px] text-slate-400 bg-transparent border-none focus:ring-0 cursor-pointer hover:text-slate-600 transition-colors">
+        <option value="">Quick Prompts...</option>
+        <option value="What is this element and what are its primary dimensions?">Identify selected element</option>
+        <option value="Summarize the technical specifications for the selected items.">Summarize properties</option>
+        <option value="Is there any missing metadata for this selection?">Check for missing data</option>
+        <option value="Describe the material composition of these elements.">Material info</option>
+      </select>
+    </div>
+
+    <div id="forgeViewer"></div>
+  </div>
+
+  <!-- Autodesk Viewer JS -->
+  <script src="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.108.0/viewer3D.min.js"></script>
+
+  <script>
+    // === CONFIG ===
+    const AI_URL = "https://revit-viewer-backend.onrender.com/api/ai";
+    const TOKEN_URL = 'https://revit-viewer-backend.onrender.com/api/auth/token';
+    // FIXED: Removed the '$' typo in the URN path
+    const documentId = 'urn:dXJuOmFkc2sub2JqZWN0czpvcy5vYmplY3Q6YW50b25yZXZpdGJ1Y2tldDIwMjYvYnJ6MDAxLmR3Zng';
+
+    let viewer = null;
+    let cachedToken = null;
+    let cachedExpiryMs = 0;
+    let inflightPromise = null;
+    let currentSelectionData = null;
+
+    // === AUTH & INITIALIZATION ===
+    async function fetchToken() {
+      if (inflightPromise) return inflightPromise;
+      inflightPromise = (async () => {
+        try {
+          const res = await fetch(TOKEN_URL);
+          if (!res.ok) throw new Error(`Auth failed (${res.status})`);
+          const data = await res.json();
+          cachedToken = data.access_token;
+          cachedExpiryMs = Date.now() + (data.expires_in * 1000) - 60000;
+          return data;
+        } catch (err) {
+          console.error('Auth Failed', err);
+          throw err;
+        }
+      })();
+      try { return await inflightPromise; } finally { inflightPromise = null; }
+    }
+
+    function getAccessToken(onGetAccessToken) {
+      if (cachedToken && Date.now() < cachedExpiryMs) {
+        onGetAccessToken(cachedToken, 3600);
+      } else {
+        fetchToken().then(data => onGetAccessToken(data.access_token, data.expires_in)).catch(() => onGetAccessToken('', 0));
+      }
+    }
+
+    function initViewer() {
+      const htmlDiv = document.getElementById('forgeViewer');
+      if (htmlDiv.clientHeight === 0) { setTimeout(initViewer, 100); return; }
+
+      const options = { env: 'AutodeskProduction', api: 'derivativeV2', getAccessToken };
+
+      Autodesk.Viewing.Initializer(options, () => {
+        viewer = new Autodesk.Viewing.GuiViewer3D(htmlDiv, {
+          extensions: ['Autodesk.Section', 'Autodesk.Measure', 'Autodesk.PropertiesManager']
+        });
+
+        const startedCode = viewer.start();
+        if (startedCode > 0) {
+            console.error('Failed to create a Viewer: WebGL not supported.');
+            return;
+        }
+
+        const resizeObserver = new ResizeObserver(() => { if (viewer && viewer.impl) viewer.resize(); });
+        resizeObserver.observe(htmlDiv);
+
+        Autodesk.Viewing.Document.load(documentId, (doc) => {
+          const viewable = doc.getRoot().getDefaultGeometry();
+          viewer.loadDocumentNode(doc, viewable).then(() => {
+            viewer.setBackgroundColor(248, 250, 252, 248, 250, 252);
+          });
+        }, (errCode, errMsg) => {
+            console.error('Doc Load Error:', errCode, errMsg);
+            ui.status.innerText = `Load Error ${errCode}`;
+            ui.status.className = "status-text text-red-600";
+        });
+
+        viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, (ev) => {
+            ui.zoomBtn.classList.toggle('hidden', ev.dbIdArray.length === 0);
+        });
+      });
+    }
+
+    // === AI ASSISTANT PANEL LOGIC ===
+    const ui = {
+      input: document.getElementById('ai-input'),
+      askBtn: document.getElementById('btn-ask'),
+      clearBtn: document.getElementById('btn-clear'),
+      selBtn: document.getElementById('btn-selection'),
+      status: document.getElementById('ai-status'),
+      responseArea: document.getElementById('ai-response-area'),
+      answer: document.getElementById('ai-answer'),
+      modelBadge: document.querySelector('#ai-model-info span'),
+      modelInfo: document.getElementById('ai-model-info'),
+      prompts: document.getElementById('ai-prompts'),
+      zoomBtn: document.getElementById('btn-highlight')
+    };
+
+    async function getSelectionContext() {
+      if (!viewer) return null;
+      const dbIds = viewer.getSelection();
+      if (!dbIds || dbIds.length === 0) return null;
+
+      const properties = [];
+      const maxToFetch = Math.min(dbIds.length, 10);
+
+      const fetchProps = (id) => new Promise(resolve => viewer.getProperties(id, resolve));
+
+      for (let i = 0; i < maxToFetch; i++) {
+        const data = await fetchProps(dbIds[i]);
+        if (!data) continue;
+        
+        const coreParams = data.properties.filter(p => 
+          ['Category', 'Type', 'Level', 'Material', 'Area', 'Volume', 'Height', 'Width'].includes(p.displayName)
+        ).map(p => ({ label: p.displayName, value: p.displayValue }));
+
+        properties.push({
+          dbId: dbIds[i],
+          name: data.name,
+          category: data.properties.find(p => p.displayName === 'Category')?.displayValue,
+          params: coreParams
+        });
+      }
+
+      return { dbIds, count: dbIds.length, properties };
+    }
+
+    async function handleAsk() {
+      const text = ui.input.value.trim();
+      if (!text) return;
+
+      ui.askBtn.disabled = true;
+      ui.status.innerText = "Processing...";
+      ui.status.className = "status-text text-blue-500 loading-pulse";
+
+      try {
+        const response = await fetch(AI_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, selection: currentSelectionData })
+        });
+
+        if (response.status === 429) {
+          const retry = response.headers.get('Retry-After') || '5';
+          throw new Error(`Rate limited (retry in ${retry}s)`);
+        }
+
+        if (!response.ok) throw new Error("Server communication error.");
+
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+
+        ui.responseArea.classList.remove('hidden');
+        ui.answer.innerText = data.answer;
+        
+        if (data.model) {
+          ui.modelBadge.innerText = `Source: ${data.model}`;
+          ui.modelInfo.classList.remove('hidden');
+        } else {
+          ui.modelInfo.classList.add('hidden');
+        }
+        
+        ui.status.innerText = "Ready";
+        ui.status.className = "status-text text-slate-500";
+
+      } catch (err) {
+        ui.status.innerText = err.message;
+        ui.status.className = "status-text text-red-500";
+      } finally {
+        ui.askBtn.disabled = false;
+      }
+    }
+
+    ui.askBtn.onclick = handleAsk;
+
+    ui.selBtn.onclick = async () => {
+      ui.status.innerText = "Reading BIM data...";
+      currentSelectionData = await getSelectionContext();
+      if (!currentSelectionData) {
+        ui.status.innerText = "No objects selected";
+        ui.status.className = "status-text text-amber-600";
+      } else {
+        ui.status.innerText = `Context: ${currentSelectionData.count} items`;
+        ui.status.className = "status-text text-blue-600";
+        ui.selBtn.classList.add('bg-blue-50', 'text-blue-600', 'border-blue-200');
+      }
+    };
+
+    ui.clearBtn.onclick = () => {
+      ui.input.value = "";
+      ui.answer.innerText = "";
+      ui.responseArea.classList.add('hidden');
+      ui.status.innerText = "Ready";
+      ui.status.className = "status-text text-slate-500";
+      currentSelectionData = null;
+      ui.selBtn.classList.remove('bg-blue-50', 'text-blue-600', 'border-blue-200');
+    };
+
+    ui.input.onkeydown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleAsk();
+      }
+    };
+
+    ui.prompts.onchange = (e) => {
+      if(e.target.value) {
+        ui.input.value = e.target.value;
+        ui.prompts.value = "";
+      }
+    };
+
+    ui.zoomBtn.onclick = () => {
+      if(!viewer) return;
+      const ids = viewer.getSelection();
+      if(ids.length > 0) {
+        viewer.isolate(ids);
+        viewer.fitToView(ids);
+      }
+    };
+
+    window.onload = initViewer;
+  </script>
+</body>
+</html>
