@@ -6,119 +6,180 @@
   <title>APS Viewer + AI BIM Assistant</title>
 
   <!-- Autodesk APS Viewer -->
-  <link rel="stylesheet" href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css" type="text/css" />
-  <script src="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.min.js"></script>
+  <link rel="stylesheet" href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.96/style.min.css" type="text/css" />
+  <script src="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.96/viewer3D.min.js"></script>
 
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <style>
-    :root{
-      --bg: #f1f5f9;
-      --panel: #ffffff;
-      --muted: #64748b;
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    :root {
+      --bg: #f3f4f6;
+      --card-bg: #ffffff;
+      --primary: #2a8da1;
+      --primary-hover: #227384;
       --border: #e2e8f0;
-      --shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-      --accent: #0891b2;
+      --text-main: #1e293b;
+      --text-muted: #64748b;
     }
-    body { background: var(--bg); color: #0f172a; font-family: 'Inter', system-ui, sans-serif; }
-    .card { background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: 12px; }
+
+    body { 
+      background: var(--bg); 
+      color: var(--text-main); 
+      font-family: 'Inter', sans-serif; 
+      overflow-x: hidden; 
+    }
+
+    .glass-card { 
+      background: var(--card-bg); 
+      border: 1px solid var(--border); 
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+      border-radius: 16px; 
+    }
+
     .btn {
-      display:inline-flex; align-items:center; justify-content:center;
-      padding: .6rem 1rem; border-radius: 8px; border: 1px solid var(--border);
-      background: white; font-weight: 600; transition: all 0.2s; font-size: 0.875rem;
+      display: inline-flex; align-items:center; justify-content:center;
+      padding: 0.5rem 1rem; border-radius: 10px; border: 1px solid var(--border);
+      background: white; font-weight: 500; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      font-size: 0.8125rem;
     }
-    .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: #f0f9ff; }
-    .btn-primary{ background: var(--accent); color: white; border-color: transparent; }
-    .btn-primary:hover:not(:disabled) { background: #0e7490; color: white; box-shadow: 0 4px 6px -1px rgba(8, 145, 178, 0.4); }
-    .btn:disabled{ opacity: .5; cursor: not-allowed; }
-    .chip{ font-size: 11px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border); background: #f8fafc; color: var(--muted); font-weight: 600; }
 
-    #viewer-container { position: relative; width: 100%; height: calc(100vh - 200px); min-height: 480px; border-radius: 8px; overflow: hidden; background: #262626; }
+    .btn:hover:not(:disabled) { background: #f8fafc; border-color: #cbd5e1; transform: translateY(-1px); }
+    
+    .btn-primary { 
+      background: var(--primary); color: white; border-color: transparent; 
+      font-weight: 600;
+    }
+    
+    .btn-primary:hover:not(:disabled) { 
+      background: var(--primary-hover); color: white; 
+      box-shadow: 0 4px 12px rgba(42, 141, 161, 0.25);
+    }
+    
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .input-field {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.625rem 0.875rem;
+      font-size: 0.8125rem;
+      transition: all 0.2s;
+    }
+    .input-field:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(42, 141, 161, 0.1);
+      background: white;
+    }
+
+    #viewer-container { 
+      position: relative; width: 100%; height: 100%; 
+      border-radius: 12px; overflow: hidden; background: #eaeff2;
+      border: 1px solid var(--border);
+    }
+    
     #viewer { width: 100%; height: 100%; }
-
+    
     .viewer-overlay {
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      background: rgba(15, 23, 42, 0.8); color: white; z-index: 10;
-      backdrop-filter: blur(4px); transition: opacity 0.5s;
+      background: rgba(255, 255, 255, 0.9); color: var(--text-main); z-index: 10;
+      backdrop-filter: blur(8px); transition: opacity 0.4s;
     }
     .viewer-overlay.hidden { opacity: 0; pointer-events: none; }
 
-    .msg-user{ background:#f1f5f9; border:1px solid var(--border); align-self: flex-end; border-bottom-right-radius: 2px; }
-    .msg-ai{ background:#ecfeff; border:1px solid #bae6fd; align-self: flex-start; border-bottom-left-radius: 2px; }
-    .scrollbar::-webkit-scrollbar { width: 5px; }
-    .scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    .msg-user { 
+      background: #f1f5f9; align-self: flex-end; 
+      border-radius: 14px 14px 2px 14px;
+      color: var(--text-main);
+    }
+    .msg-ai { 
+      background: #eef9fa; border: 1px solid #c8e9ee; align-self: flex-start; 
+      border-radius: 14px 14px 14px 2px;
+      color: #164e63;
+    }
+
+    .scrollbar::-webkit-scrollbar { width: 6px; }
+    .scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+    
+    .status-badge {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      padding: 2px 8px; border-radius: 6px; letter-spacing: 0.025em;
+    }
   </style>
 </head>
 
-<body class="p-4 md:p-6 lg:overflow-hidden h-screen flex flex-col">
+<body class="p-4 md:p-6 h-screen flex flex-col overflow-hidden">
   <div class="max-w-[1800px] mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
 
-    <!-- LEFT: Viewer -->
-    <div class="lg:col-span-8 card p-4 flex flex-col">
-      <div class="flex items-center justify-between mb-4">
+    <!-- LEFT: Viewer Section -->
+    <div class="lg:col-span-8 glass-card p-5 flex flex-col min-h-0">
+      <div class="flex items-center justify-between mb-5">
         <div class="flex items-center gap-3">
-          <div id="statusDot" class="w-3 h-3 rounded-full bg-slate-400"></div>
+          <div id="statusDot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></div>
           <h2 class="font-bold text-lg tracking-tight">BIM Engine</h2>
-          <span id="viewerStatus" class="chip">Idle</span>
+          <span id="viewerStatus" class="status-badge bg-slate-100 text-slate-500">Connecting</span>
         </div>
         <div class="flex gap-2">
-          <button id="btnFit" class="btn h-9 px-4">Fit</button>
-          <button id="btnReset" class="btn h-9 px-4">Reset</button>
+          <button id="btnFit" class="btn text-xs px-4 h-8">Fit View</button>
+          <button id="btnReset" class="btn text-xs px-4 h-8">Reset</button>
         </div>
       </div>
 
-      <div id="viewer-container">
-        <div id="viewerOverlay" class="viewer-overlay">
-          <div class="text-center p-6">
-            <div class="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <h3 class="text-xl font-bold mb-2">Connecting to BIM Data...</h3>
-            <p id="overlayText" class="text-slate-400 text-sm max-w-xs mx-auto">Accessing secure model stream...</p>
+      <div class="flex-1 min-h-0">
+        <div id="viewer-container">
+          <div id="viewerOverlay" class="viewer-overlay">
+            <div class="text-center">
+              <div class="w-10 h-10 border-3 border-cyan-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p class="text-sm font-medium text-slate-600">Initializing 3D Environment...</p>
+            </div>
           </div>
+          <div id="viewer"></div>
         </div>
-        <div id="viewer"></div>
       </div>
 
-      <div class="mt-4 flex flex-wrap items-center gap-3">
-        <span class="chip">Objects: <span id="dataCount" class="font-bold text-cyan-600">0</span></span>
-        <span class="chip">Selected: <span id="selCount" class="font-bold text-cyan-600">0</span></span>
+      <div class="mt-4 flex items-center justify-between text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+        <div class="flex gap-4">
+          <span>Objects: <span id="dataCount" class="text-cyan-700 font-bold">0</span></span>
+          <span>Selected: <span id="selCount" class="text-cyan-700 font-bold">0</span></span>
+        </div>
+        <div class="flex items-center gap-1">
+          <span class="w-2 h-2 rounded-full bg-green-500"></span>
+          Live Stream
+        </div>
       </div>
     </div>
 
-    <!-- RIGHT: AI Assistant Only -->
+    <!-- RIGHT: AI Section Only -->
     <div class="lg:col-span-4 flex flex-col min-h-0">
-      <div class="card p-5 flex-1 flex flex-col min-h-0">
+      <div class="glass-card p-5 flex-1 flex flex-col min-h-0">
         <div class="flex items-center justify-between mb-4">
-          <h3 class="font-bold flex items-center gap-2 text-sm uppercase text-slate-500">AI Assistant</h3>
-          <div class="flex gap-4 items-center">
-            <button id="btnClear" class="text-[10px] font-bold text-slate-400 hover:text-red-500 uppercase transition-colors">Clear</button>
-            <span class="chip font-mono text-[10px]">v2.8.3</span>
+          <h3 class="font-bold text-xs uppercase text-slate-400 tracking-widest">AI Assistant</h3>
+          <div class="flex items-center gap-4">
+            <button id="btnClear" class="text-[10px] font-bold text-slate-300 hover:text-red-400 uppercase">Clear</button>
+            <span class="text-[10px] font-bold text-slate-300">v2.9.8</span>
           </div>
         </div>
 
-        <div id="chat" class="flex-1 overflow-y-auto space-y-4 mb-4 scrollbar pr-2 text-sm">
-          <div class="p-4 rounded-xl bg-slate-50 border border-slate-100 text-slate-500 text-xs leading-relaxed">
-            <b>System Ready</b><br>
-            The model is loading. Click <b>Index BIM Metadata</b> to scan properties (category/level/material/area/volume).
+        <div id="chat" class="flex-1 overflow-y-auto space-y-4 mb-4 scrollbar pr-2">
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-100 text-slate-500 text-[12px] leading-relaxed">
+            System initialization... Loading model and preparing AI metadata indexing.
           </div>
         </div>
 
         <div class="space-y-3">
-          <button id="btnBuild" class="btn w-full py-3 mb-2 border-dashed border-2 hover:border-cyan-500 bg-slate-50" disabled>
-            Index BIM Metadata
-          </button>
-
-          <textarea id="prompt" rows="3"
-            class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm focus:ring-2 focus:ring-cyan-500 outline-none transition-all resize-none bg-slate-50 shadow-inner"
-            placeholder="Ask: Total concrete volume, How many doors, Windows per level..."></textarea>
-
-          <div class="flex gap-2">
-            <button id="btnAsk" class="btn btn-primary flex-1" disabled>Ask Assistant</button>
-            <button id="btnAskSel" class="btn flex-none w-12" title="Analyze Selection" disabled>
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+          <div class="relative">
+            <textarea id="prompt" rows="3"
+              class="w-full input-field resize-none py-3 pr-10 text-sm"
+              placeholder="Search: windows, level 1 walls..."></textarea>
+            <button id="btnAskSel" class="absolute right-3 bottom-3 text-slate-400 hover:text-cyan-600 transition-colors" title="Analyze Selection">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
             </button>
           </div>
+          <button id="btnAsk" class="btn btn-primary w-full h-11" disabled>Ask Assistant</button>
         </div>
       </div>
     </div>
@@ -128,296 +189,155 @@
     let viewer = null;
     let modelDataCache = [];
     let isBuilding = false;
-
-    const DEFAULT_URN = "dXJuOmFkc2sub2JqZWN0czpvcy5vYmplY3Q6YW50b25yZXZpdGJ1Y2tldDIwMjYvYnJ6MDAxLmR3Zng";
-
+    
     const $ = (id) => document.getElementById(id);
     const backendBase = () => "https://revit-viewer-backend.onrender.com";
+    const defaultUrn = "dXJuOmFkc2sub2JqZWN0czpvcy5vYmplY3Q6YW50b25yZXZpdGJ1Y2tldDIwMjYvYnJ6MDAxLmR3Zng";
 
-    function updateStatus(state, colorClass = "bg-slate-400") {
+    function updateStatus(state, colorClass = "bg-slate-300") {
       $("viewerStatus").textContent = state;
-      $("statusDot").className = `w-3 h-3 rounded-full animate-pulse ${colorClass}`;
+      $("statusDot").className = `w-2.5 h-2.5 rounded-full ${colorClass}`;
     }
 
     function pushMsg(role, text) {
       const chat = $("chat");
       const div = document.createElement("div");
-      div.className = `max-w-[90%] rounded-2xl px-4 py-3 shadow-sm ${role === "user" ? "msg-user" : "msg-ai"}`;
-      div.innerHTML = `<div class="text-[9px] font-black uppercase mb-1 opacity-40">${role === "user" ? "You" : "AI"}</div><div class="leading-relaxed font-medium"></div>`;
-      div.querySelector("div.leading-relaxed").textContent = text;
+      div.className = `max-w-[85%] px-4 py-3 shadow-sm text-[13px] ${role === "user" ? "msg-user" : "msg-ai"}`;
+      div.innerHTML = `<div class="leading-relaxed">${text}</div>`;
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
-    }
-
-    function safeDbIds(dbIds) {
-      return Array.isArray(dbIds) ? dbIds.filter(n => Number.isInteger(n) && n > 0) : [];
     }
 
     async function getAccessToken(onTokenReady) {
       try {
         const resp = await fetch(`${backendBase()}/api/auth/token`);
-        if (!resp.ok) {
-          const t = await resp.text().catch(() => "");
-          throw new Error(`Token error HTTP ${resp.status}: ${t}`);
-        }
         const data = await resp.json();
         onTokenReady(data.access_token, data.expires_in);
-      } catch (err) {
-        console.error(err);
-        updateStatus("Token Error", "bg-red-500");
-        $("overlayText").textContent = "Token Error. Check backend /api/auth/token + scopes (viewables:read).";
-      }
+      } catch (err) { updateStatus("Error", "bg-red-500"); }
     }
 
     function initViewer() {
       return new Promise((resolve, reject) => {
-        const options = { env: "AutodeskProduction", getAccessToken };
+        if (viewer) { viewer.finish(); viewer = null; }
+        const container = $("viewer");
+        if (container.clientWidth === 0) {
+            setTimeout(() => initViewer().then(resolve), 300);
+            return;
+        }
 
+        const options = { env: 'AutodeskProduction', getAccessToken };
         Autodesk.Viewing.Initializer(options, () => {
           viewer = new Autodesk.Viewing.GuiViewer3D($("viewer"));
-          const code = viewer.start();
-          if (code > 0) return reject(new Error("Viewer failed to start"));
-
+          viewer.start();
           viewer.setTheme("light-theme");
-
           viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, () => {
             $("selCount").textContent = (viewer.getSelection() || []).length;
           });
-
           resolve();
         });
       });
     }
 
     async function loadModel(rawUrn) {
-      if (!viewer) await initViewer();
+      try {
+        if (!viewer) await initViewer();
+        updateStatus("Loading", "bg-yellow-400");
+        $("viewerOverlay").classList.remove("hidden");
+        const documentId = 'urn:' + rawUrn.trim().replace(/^urn:/, "");
 
-      updateStatus("Connecting...", "bg-yellow-500");
-      $("overlayText").textContent = "Loading model viewables...";
-      $("viewerOverlay").classList.remove("hidden");
-
-      let cleanUrn = String(rawUrn || "").trim();
-      if (cleanUrn.startsWith("urn:")) cleanUrn = cleanUrn.substring(4);
-      if (!cleanUrn) {
-        updateStatus("URN Missing", "bg-red-500");
-        $("overlayText").textContent = "URN missing. Provide a base64 URN.";
-        return;
-      }
-
-      const documentId = "urn:" + cleanUrn;
-
-      // IMPORTANT: attach event BEFORE load, to avoid race condition
-      const onTree = () => {
-        viewer.removeEventListener(Autodesk.Viewing.OBJECT_TREE_CREATED_EVENT, onTree);
-
-        updateStatus("Ready", "bg-green-500");
-        $("viewerOverlay").classList.add("hidden");
-
-        $("btnBuild").disabled = false;
-        $("btnBuild").classList.remove("bg-slate-50");
-        $("btnBuild").classList.add("bg-cyan-50", "border-cyan-200");
-
-        $("overlayText").textContent = "Ready.";
-      };
-      viewer.addEventListener(Autodesk.Viewing.OBJECT_TREE_CREATED_EVENT, onTree);
-
-      Autodesk.Viewing.Document.load(
-        documentId,
-        (doc) => {
-          const viewable = doc.getRoot().getDefaultGeometry();
-          if (!viewable) {
-            updateStatus("No Viewable", "bg-red-500");
-            $("overlayText").textContent = "No default geometry. Make sure the URN is translated (SVF/SVF2).";
-            return;
+        Autodesk.Viewing.Document.load(documentId, (doc) => {
+            const viewable = doc.getRoot().getDefaultGeometry();
+            viewer.loadDocumentNode(doc, viewable).then(() => {
+              viewer.addEventListener(Autodesk.Viewing.OBJECT_TREE_CREATED_EVENT, () => {
+                  updateStatus("Ready", "bg-green-500");
+                  $("viewerOverlay").classList.add("hidden");
+                  buildIndex();
+              }, { once: true });
+            });
+          }, (err) => {
+              updateStatus("Failed", "bg-red-500");
+              pushMsg("ai", "<b>Load Error:</b> Authentication or URN invalid.");
           }
-
-          viewer.loadDocumentNode(doc, viewable).catch((e) => {
-            console.error(e);
-            updateStatus("Load Error", "bg-red-500");
-            $("overlayText").textContent = "loadDocumentNode failed. Check console.";
-          });
-        },
-        (errCode, errMsg) => {
-          console.error("Document.load failed:", errCode, errMsg);
-          updateStatus("Load Error", "bg-red-500");
-          $("overlayText").textContent = `Document.load failed (${errCode}). Check URN translation + token scopes.`;
-        }
-      );
-    }
-
-    function pickProp(props, names) {
-      if (!Array.isArray(props)) return null;
-      const map = new Map();
-      for (const p of props) map.set(String(p.displayName || "").toLowerCase(), p.displayValue);
-      for (const name of names) {
-        const v = map.get(String(name).toLowerCase());
-        if (v != null && v !== "") return v;
-      }
-      return null;
-    }
-
-    function asNumber(v) {
-      if (v == null) return 0;
-      if (typeof v === "number") return Number.isFinite(v) ? v : 0;
-      const s = String(v).replace(",", ".").replace(/[^\d.+-eE]/g, "");
-      const n = parseFloat(s);
-      return Number.isFinite(n) ? n : 0;
+        );
+      } catch (e) { updateStatus("Error", "bg-red-500"); }
     }
 
     async function buildIndex() {
       if (!viewer || !viewer.model || isBuilding) return;
+      isBuilding = true;
+      updateStatus("Indexing", "bg-cyan-500 animate-pulse");
 
       const tree = viewer.model.getInstanceTree();
-      if (!tree) return pushMsg("ai", "Tree not ready. Try again in 2 seconds.");
-
-      isBuilding = true;
-      $("btnBuild").disabled = true;
-      $("btnBuild").textContent = "Deep Scan...";
-      updateStatus("Indexing...", "bg-cyan-500");
-
-      // Collect nodes with fragments (renderable)
-      const ids = [];
-      const rootId = tree.getRootId();
-
+      if (!tree) { isBuilding = false; return; }
+      
+      const allIds = [];
       const crawl = (id) => {
+          allIds.push(id);
+          tree.enumNodeChildren(id, (childId) => crawl(childId));
+      };
+      crawl(tree.getRootId());
+
+      const leafIds = allIds.filter(id => {
         let hasFrag = false;
         tree.enumNodeFragments(id, () => { hasFrag = true; }, false);
-        if (hasFrag) ids.push(id);
-        tree.enumNodeChildren(id, (childId) => crawl(childId));
-      };
-      crawl(rootId);
+        return hasFrag;
+      });
 
-      const propFilter = [
-        "Category",
-        "Level", "Base Level", "Reference Level", "Schedule Level",
-        "Material", "Structural Material",
-        "Area", "Host Area Computed",
-        "Volume"
-      ];
-
-      const chunkSize = 1500;
+      const chunkSize = 400;
       const results = [];
+      const stats = {};
 
-      for (let i = 0; i < ids.length; i += chunkSize) {
-        const chunk = ids.slice(i, i + chunkSize);
-
-        const rows = await new Promise((resolve, reject) => {
-          viewer.model.getBulkProperties(
-            chunk,
-            { propFilter, ignoreHidden: true },
-            resolve,
-            reject
-          );
-        });
-
-        for (const item of rows) {
+      for (let i = 0; i < leafIds.length; i += chunkSize) {
+        const chunk = leafIds.slice(i, i + chunkSize);
+        const props = await new Promise(res => viewer.model.getBulkProperties(chunk, null, res));
+        for (const item of props) {
           const p = item.properties || [];
-
-          const category = pickProp(p, ["Category", "Revit Category"]) || "Other";
-          const level = pickProp(p, ["Level", "Base Level", "Schedule Level", "Reference Level"]) || "Unknown";
-          const material = pickProp(p, ["Material", "Structural Material"]) || "";
-          const area = asNumber(pickProp(p, ["Area", "Host Area Computed"]));
-          const volume = asNumber(pickProp(p, ["Volume"]));
-
-          results.push({
-            dbId: item.dbId,
-            category,
-            level,
-            material,
-            area,
-            volume
-          });
+          const cat = p.find(x => x.displayName.toLowerCase().includes("category"))?.displayValue || "Other";
+          stats[cat] = (stats[cat] || 0) + 1;
+          const allVals = p.map(x => String(x.displayValue)).join(" ");
+          results.push({ dbId: item.dbId, searchBlob: `${cat} ${item.name} ${allVals}`.toLowerCase() });
         }
-
         $("dataCount").textContent = results.length;
       }
 
       modelDataCache = results;
       isBuilding = false;
-
-      $("btnBuild").textContent = "Update Index";
-      $("btnBuild").disabled = false;
       $("btnAsk").disabled = false;
-      $("btnAskSel").disabled = false;
-
       updateStatus("Ready", "bg-green-500");
-      pushMsg("ai", `Indexed ${results.length} elements (category/level/material/area/volume). Now ask: "Total concrete volume", "How many doors", "Windows per level".`);
+      
+      const topCats = Object.entries(stats).sort((a,b) => b[1]-a[1]).slice(0, 5).map(c => `• ${c[0]} (${c[1]})`).join("<br>");
+      pushMsg("ai", `<b>Auto-Indexing Complete</b><br>BIM data successfully cached (${results.length} items).<br><br><b>Primary Components:</b><br>${topCats}`);
     }
 
-    async function askAI(isSelection = false) {
-      const text = $("prompt").value.trim();
-      if (!text) return;
-
-      if (!modelDataCache.length) {
-        pushMsg("ai", "Please click 'Index BIM Metadata' first.");
-        return;
-      }
-
-      const selection = viewer?.getSelection?.() || [];
-      const dataSlice = isSelection
-        ? modelDataCache.filter(item => selection.includes(item.dbId))
-        : modelDataCache;
-
-      pushMsg("user", isSelection ? `${text} (selection: ${selection.length})` : text);
+    async function askAI() {
+      const queryText = $("prompt").value.trim().toLowerCase();
+      if (!queryText || !modelDataCache.length) return;
+      pushMsg("user", queryText);
       $("prompt").value = "";
 
-      try {
-        updateStatus("Thinking...", "bg-yellow-500");
+      let targetIds = modelDataCache.filter(item => item.searchBlob.includes(queryText)).map(i => i.dbId);
 
-        const resp = await fetch(`${backendBase()}/api/ai`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, modelData: dataSlice })
-        });
-
-        if (!resp.ok) {
-          const t = await resp.text().catch(() => "");
-          throw new Error(`AI HTTP ${resp.status}: ${t}`);
-        }
-
-        const data = await resp.json();
-        pushMsg("ai", data.answer || "(no answer)");
-
-        const ids = safeDbIds(data.dbIds);
-        if (ids.length) {
-          viewer.isolate(ids);
-          viewer.fitToView(ids);
-          viewer.setSelection(ids);
-        } else {
-          // no results -> unisolate
-          viewer.isolate([]);
-        }
-
-        updateStatus("Ready", "bg-green-500");
-      } catch (err) {
-        console.error(err);
-        pushMsg("ai", "Error contacting assistant. Check console / backend logs.");
-        updateStatus("Error", "bg-red-500");
+      if (targetIds.length > 0) {
+          pushMsg("ai", `Showing <b>${targetIds.length}</b> matches.`);
+          viewer.isolate(targetIds);
+          viewer.fitToView(targetIds);
+      } else {
+          pushMsg("ai", "No matches found. Try category names like 'Wall' or 'Door'.");
       }
     }
 
-    $("btnBuild").onclick = buildIndex;
-    $("btnAsk").onclick = () => askAI(false);
-    $("btnAskSel").onclick = () => askAI(true);
-    $("btnFit").onclick = () => viewer?.fitToView?.();
-    $("btnReset").onclick = () => {
-      if (!viewer) return;
-      viewer.isolate([]);
-      viewer.fitToView();
-      viewer.setSelection([]);
-    };
+    $("btnAsk").onclick = askAI;
+    $("btnFit").onclick = () => viewer.fitToView();
+    $("btnReset").onclick = () => { viewer.isolate([]); viewer.fitToView(); viewer.setSelection([]); };
     $("btnClear").onclick = () => $("chat").innerHTML = "";
 
-    window.onload = async () => {
-      try {
-        await initViewer();
-        setTimeout(() => loadModel(DEFAULT_URN), 300);
-      } catch (e) {
-        console.error(e);
-        updateStatus("Viewer Error", "bg-red-500");
-        $("overlayText").textContent = "Viewer failed to start. Check console.";
-      }
-    };
+    window.addEventListener('load', () => {
+        initViewer().then(() => loadModel(defaultUrn));
+    });
+
+    window.addEventListener('resize', () => {
+        if (viewer && viewer.impl) viewer.resize();
+    });
   </script>
 </body>
 </html>
