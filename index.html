@@ -3,368 +3,561 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AZ | BIM AI Viewer</title>
+  <title>APS Viewer + AI BIM Assistant</title>
 
-  <link rel="stylesheet"
-    href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.108.0/style.min.css" />
+  <!-- Autodesk APS Viewer -->
+  <link rel="stylesheet" href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css" type="text/css" />
+  <script src="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.min.js"></script>
+
+  <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <style>
-    html, body { margin:0; padding:0; height:100%; width:100%; overflow:hidden; background:#f8fafc; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
-    #viewer { position:absolute; inset:0; width: 100%; height: 100%; }
-
-    .glass {
-      background: rgba(255, 255, 255, 0.9);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(0, 0, 0, 0.08);
-      border-radius: 14px;
+    :root{
+      --bg: #ffffff;
+      --panel: #ffffff;
+      --muted: #6b7280;
+      --border: #eef0f3;
+      --shadow: 0 2px 10px rgba(0,0,0,.06);
+      --accent: #00bcd4;
     }
-
-    #panel {
-      position: absolute; top: 20px; right: 20px; width: 360px;
-      z-index: 20; padding: 16px;
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+    body { background: var(--bg); }
+    .card { background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: 16px; }
+    .btn {
+      display:inline-flex; align-items:center; justify-content:center;
+      padding: .6rem .9rem; border-radius: 12px; border: 1px solid var(--border);
+      background: white; font-weight: 600;
     }
-
-    .status { font-size: 12px; font-weight: 600; }
-    #response-box { max-height: 280px; overflow-y: auto; }
+    .btn-primary{ background: var(--accent); color: white; border-color: transparent; }
+    .btn:disabled{ opacity: .6; cursor: not-allowed; }
+    .chip{ font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    #viewer { width: 100%; height: calc(100vh - 24px); min-height: 520px; border-radius: 16px; overflow: hidden; }
+    .msg-user{ background:#f3f4f6; border:1px solid var(--border); }
+    .msg-ai{ background:#ecfeff; border:1px solid #cffafe; }
+    .scrollbar::-webkit-scrollbar { width: 10px; }
+    .scrollbar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
   </style>
 </head>
 
-<body>
-  <div id="panel" class="glass">
-    <div class="flex justify-between items-center mb-3">
-      <div class="flex items-center gap-2">
-        <div class="w-6 h-6 rounded bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">AZ</div>
-        <div class="font-bold text-sm text-slate-800">AI BIM Assistant</div>
+<body class="p-3 md:p-4">
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-4">
+
+    <!-- LEFT: Viewer -->
+    <div class="lg:col-span-8 card p-2 md:p-3">
+      <div class="flex items-center justify-between gap-2 mb-2 md:mb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-2.5 h-2.5 rounded-full" style="background: var(--accent)"></div>
+          <div class="font-semibold text-slate-900">APS Viewer</div>
+          <span id="viewerStatus" class="chip">Idle</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="btnFit" class="btn">Fit</button>
+          <button id="btnReset" class="btn">Reset</button>
+        </div>
       </div>
-      <div id="status" class="status text-slate-500">Loading…</div>
+
+      <div id="viewer"></div>
+
+      <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+        <span class="chip">Selection: <span id="selCount">0</span></span>
+        <span class="chip">Model Data: <span id="dataState">not built</span></span>
+        <span class="chip">Elements cached: <span id="dataCount">0</span></span>
+      </div>
     </div>
 
-    <div id="hint" class="text-[11px] text-slate-500 mb-3 bg-slate-50 p-2 rounded border border-slate-100">
-      Initializing Autodesk Viewer…
-    </div>
+    <!-- RIGHT: Controls + AI -->
+    <div class="lg:col-span-4 card p-3 md:p-4 flex flex-col min-h-[520px]">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <div class="text-lg font-semibold text-slate-900">AI BIM Assistant</div>
+          <div class="text-sm text-slate-500">Ask questions and highlight results in the model.</div>
+        </div>
+        <span class="chip mono">/api/ai</span>
+      </div>
 
-    <div id="response-box" class="hidden text-xs bg-white border border-slate-100 p-3 rounded-lg mb-3 shadow-sm">
-      <div id="answer" class="text-slate-800 leading-relaxed"></div>
-    </div>
+      <!-- Connection / Model -->
+      <div class="mt-4 grid gap-3">
+        <div class="grid gap-2">
+          <label class="text-xs font-semibold text-slate-700">Backend Base URL</label>
+          <input id="backendBase" class="w-full rounded-xl border border-[var(--border)] px-3 py-2 text-sm"
+                 value="https://revit-viewer-backend.onrender.com" />
+          <div class="text-xs text-slate-500">
+            Uses <span class="mono">/api/auth/token</span> and <span class="mono">/api/ai</span> on this backend.
+          </div>
+        </div>
 
-    <textarea id="input"
-      class="w-full text-xs p-3 border border-slate-200 rounded-lg mb-3 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white/50"
-      rows="3"
-      placeholder="How many doors? Show me windows. Total wall volume."></textarea>
+        <div class="grid gap-2">
+          <label class="text-xs font-semibold text-slate-700">Model URN (base64)</label>
+          <input id="modelUrn" class="w-full rounded-xl border border-[var(--border)] px-3 py-2 text-sm mono"
+                 placeholder="Paste your URN here (base64)" />
+          <div class="flex gap-2">
+            <button id="btnLoad" class="btn btn-primary w-full">Load Model</button>
+            <button id="btnBuild" class="btn w-full">Build Model Data</button>
+          </div>
+          <div id="buildHint" class="text-xs text-slate-500">
+            Tip: click <b>Build Model Data</b> once. Then AI answers like “Total concrete volume” will be accurate.
+          </div>
+        </div>
+      </div>
 
-    <div class="flex gap-2">
-      <button id="ask"
-        class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-6 py-2 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
-        disabled>Ask</button>
+      <!-- AI Chat -->
+      <div class="mt-4 flex-1 flex flex-col min-h-0">
+        <div class="flex items-center justify-between">
+          <div class="text-sm font-semibold text-slate-800">Chat</div>
+          <div class="flex items-center gap-2">
+            <button id="btnClear" class="btn text-sm">Clear</button>
+            <button id="btnUnisolate" class="btn text-sm">Unisolate</button>
+          </div>
+        </div>
 
-      <button id="clear"
-        class="bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs px-4 py-2 rounded-lg transition-all border border-slate-200">Clear</button>
+        <div id="chat" class="mt-2 flex-1 min-h-0 overflow-auto scrollbar space-y-2 pr-1">
+          <div class="text-xs text-slate-500">
+            Examples:
+            <span class="chip cursor-pointer" data-example="Total concrete volume?">Total concrete volume?</span>
+            <span class="chip cursor-pointer" data-example="How many external doors?">How many external doors?</span>
+            <span class="chip cursor-pointer" data-example="Windows per level">Windows per level</span>
+            <span class="chip cursor-pointer" data-example="Compare window count Level 1 vs Level 2">Compare window count Level 1 vs Level 2</span>
+            <span class="chip cursor-pointer" data-example="Facade area?">Facade area?</span>
+          </div>
+        </div>
 
-      <button id="reset-view"
-        class="ml-auto text-slate-400 hover:text-slate-600 transition-colors"
-        title="Reset view">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-          <path d="M3 3v5h5"/>
-        </svg>
-      </button>
+        <div class="mt-3 grid gap-2">
+          <textarea id="prompt" rows="2"
+            class="w-full rounded-xl border border-[var(--border)] px-3 py-2 text-sm"
+            placeholder="Ask: e.g. How many windows? Total wall volume? Windows per level?"></textarea>
+
+          <div class="flex gap-2">
+            <button id="btnAsk" class="btn btn-primary w-full">Ask AI</button>
+            <button id="btnAskSel" class="btn w-full">Ask (Selection)</button>
+          </div>
+
+          <div id="aiStatus" class="text-xs text-slate-500">Ready.</div>
+        </div>
+      </div>
+
     </div>
   </div>
 
-  <div id="viewer"></div>
-
-  <script src="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.108.0/viewer3D.min.js"></script>
-
   <script>
-    // ================= CONFIG =================
-    const BACKEND = "https://revit-viewer-backend.onrender.com";
-    const AI_URL = `${BACKEND}/api/ai`;
-    const TOKEN_URL = `${BACKEND}/api/auth/token`;
-
-    const MODEL_URN = "dXJuOmFkc2sub2JqZWN0czpvcy5vYmplY3Q6YW50b25yZXZpdGJ1Y2tldDIwMjYvYnJ6MDAxLmR3Zng";
-    const documentId = `urn:${MODEL_URN}`;
-
+    // ----------------------------
+    // Config / state
+    // ----------------------------
     let viewer = null;
-    let modelIndex = [];
-    let modelReady = false;
+    let currentModel = null;
 
-    let treeReady = false;
-    let geomReady = false;
-    let indexingStarted = false;
+    // Cache of extracted elements for backend to compute accurate answers
+    // Each item: { dbId, category, level, material, area, volume }
+    let modelDataCache = [];
+    let modelDataBuilt = false;
+    let building = false;
 
-    // ================= UI =================
-    const statusEl = document.getElementById("status");
-    const hintEl = document.getElementById("hint");
-    const askBtn = document.getElementById("ask");
-    const clearBtn = document.getElementById("clear");
-    const resetBtn = document.getElementById("reset-view");
-    const responseBox = document.getElementById("response-box");
-    const answerEl = document.getElementById("answer");
-    const inputEl = document.getElementById("input");
+    const $ = (id) => document.getElementById(id);
 
-    function setStatus(text, color = "slate") {
-      statusEl.textContent = text;
-      statusEl.className = `status text-${color}-600`;
+    const setViewerStatus = (txt) => $("viewerStatus").textContent = txt;
+    const setDataState = (txt) => $("dataState").textContent = txt;
+    const setDataCount = (n) => $("dataCount").textContent = String(n);
+    const setSelCount = (n) => $("selCount").textContent = String(n);
+
+    function backendBase() {
+      return ($("backendBase").value || "").replace(/\/+$/, "");
     }
 
-    // ================= TOKEN =================
-    let tokenCache = null, tokenExpire = 0;
+    function logStatus(msg) {
+      $("aiStatus").textContent = msg;
+    }
 
-    async function getAccessToken(callback) {
-      if (tokenCache && Date.now() < tokenExpire) {
-        callback(tokenCache, 3600);
-        return;
+    function pushMsg(role, text) {
+      const div = document.createElement("div");
+      div.className = `rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${role === "user" ? "msg-user" : "msg-ai"}`;
+      div.innerHTML = `<div class="text-xs font-semibold mb-1 ${role === "user" ? "text-slate-700" : "text-cyan-900"}">${role === "user" ? "You" : "AI"}</div>${escapeHtml(text)}`;
+      $("chat").appendChild(div);
+      $("chat").scrollTop = $("chat").scrollHeight;
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function pickProp(props, names) {
+      const map = new Map();
+      for (const p of (props || [])) map.set((p.displayName || "").toLowerCase(), p.displayValue);
+      for (const name of names) {
+        const v = map.get(String(name).toLowerCase());
+        if (v != null && v !== "") return v;
       }
-      try {
-        const res = await fetch(TOKEN_URL);
-        if (!res.ok) throw new Error(`Token error ${res.status}`);
-        const data = await res.json();
-        tokenCache = data.access_token;
-        tokenExpire = Date.now() + (data.expires_in * 1000) - 60000;
-        callback(data.access_token, data.expires_in);
-      } catch (err) {
-        console.error("Token fetch failed", err);
-        setStatus("Auth Error", "red");
-        hintEl.textContent = "Backend token endpoint failed.";
-      }
+      return null;
     }
 
-    // ================= VIEWER =================
-    function initViewer() {
-      const viewerDiv = document.getElementById("viewer");
-
-      Autodesk.Viewing.Initializer(
-        { env: "AutodeskProduction", api: "derivativeV2", getAccessToken },
-        () => {
-          viewer = new Autodesk.Viewing.GuiViewer3D(viewerDiv);
-          const started = viewer.start();
-          if (started > 0) {
-            setStatus("WebGL Error", "red");
-            hintEl.textContent = "WebGL not supported.";
-            return;
-          }
-
-          Autodesk.Viewing.Document.load(documentId, (doc) => {
-            const viewable = doc.getRoot().getDefaultGeometry();
-
-            viewer.loadDocumentNode(doc, viewable).then(() => {
-              viewer.setBackgroundColor(248, 250, 252, 248, 250, 252);
-
-              viewer.addEventListener(Autodesk.Viewing.OBJECT_TREE_CREATED_EVENT, () => {
-                treeReady = true;
-                maybeStartIndexing();
-              });
-
-              viewer.addEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, () => {
-                geomReady = true;
-                maybeStartIndexing();
-              });
-
-              hintEl.textContent = "Loading model…";
-              setStatus("Loading…", "slate");
-            });
-
-          }, (errCode) => {
-            console.error("Document load failed:", errCode);
-            setStatus("Load Error", "red");
-            hintEl.textContent = "Model load failed.";
-          });
-        }
-      );
-    }
-
-    function maybeStartIndexing() {
-      if (indexingStarted) return;
-      if (!treeReady || !geomReady) return;
-      indexingStarted = true;
-      buildIndex().catch((e) => {
-        console.error(e);
-        setStatus("Index Error", "red");
-        hintEl.textContent = "Failed to index model.";
-      });
-    }
-
-    // ================= CORRECT: dbIds with FRAGMENTS =================
-    function getDbIdsWithFragments() {
-      const tree = viewer.model.getInstanceTree();
-      const root = tree.getRootId();
-
-      const all = [];
-      // true = recursive enumeration of all descendants
-      tree.enumNodeChildren(root, (id) => all.push(id), true);
-
-      const fragIds = [];
-      const real = [];
-
-      for (const id of all) {
-        fragIds.length = 0;
-        tree.getNodeFragmentIds(id, fragIds);
-        if (fragIds.length > 0) real.push(id);
-      }
-
-      return real;
-    }
-
-    // ================= PROPS =================
-    function getProp(item, name) {
-      const p = item.properties?.find(x => x.displayName === name);
-      return p ? p.displayValue : null;
-    }
-
-    function toNum(v) {
+    function asNumber(v) {
       if (v == null) return 0;
-      const s = String(v).trim();
-      if (!s) return 0;
-
-      let t = s.replace(/\s/g, "");
-      if (t.includes(",") && t.includes(".")) t = t.replace(/,/g, "");
-      else if (t.includes(",") && !t.includes(".")) t = t.replace(",", ".");
-      const n = parseFloat(t);
+      if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+      const s = String(v).replace(",", ".").replace(/[^\d.+-eE]/g, "");
+      const n = parseFloat(s);
       return Number.isFinite(n) ? n : 0;
     }
 
-    // ================= INDEX =================
-    async function buildIndex() {
-      setStatus("Indexing…", "blue");
-      hintEl.textContent = "Finding real geometry elements…";
-      askBtn.disabled = true;
-
-      // Important: build from fragment-bearing nodes
-      const dbIds = getDbIdsWithFragments();
-      console.log("Geometry elements (fragments):", dbIds.length);
-
-      if (!dbIds.length) {
-        setStatus("Index Error", "red");
-        hintEl.textContent = "No geometry elements found. (Model may be 2D or empty)";
-        return;
+    // ----------------------------
+    // APS Viewer init
+    // ----------------------------
+    async function getAccessToken(onTokenReady) {
+      const url = `${backendBase()}/api/auth/token`;
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        const t = await resp.text().catch(() => "");
+        throw new Error(`Token error: HTTP ${resp.status} ${t}`);
       }
-
-      const wantedProps = [
-        "Category",
-        "Level",
-        "Base Level",
-        "Reference Level",
-        "Area",
-        "Volume",
-        "Material"
-      ];
-
-      const batchSize = 1500;
-      modelIndex = [];
-
-      for (let i = 0; i < dbIds.length; i += batchSize) {
-        const batch = dbIds.slice(i, i + batchSize);
-        const pct = Math.round((Math.min(i + batchSize, dbIds.length) / dbIds.length) * 100);
-        setStatus(`Indexing ${pct}%`, "blue");
-
-        const items = await new Promise((res, rej) => {
-          viewer.model.getBulkProperties(batch, wantedProps, res, rej);
-        });
-
-        for (const item of items) {
-          const levelVal =
-            getProp(item, "Level") ||
-            getProp(item, "Base Level") ||
-            getProp(item, "Reference Level") ||
-            "Unknown";
-
-          modelIndex.push({
-            dbId: item.dbId,
-            category: getProp(item, "Category") || "Other",
-            level: levelVal,
-            area: toNum(getProp(item, "Area")),
-            volume: toNum(getProp(item, "Volume")),
-            material: getProp(item, "Material") || "N/A"
-          });
-        }
-      }
-
-      modelReady = true;
-      setStatus("Ready", "green");
-      hintEl.textContent = `Model indexed (${modelIndex.length} elements). Ask a question.`;
-      askBtn.disabled = false;
+      const data = await resp.json();
+      onTokenReady(data.access_token, data.expires_in);
     }
 
-    // ================= ASK =================
-    async function ask() {
-      if (!modelReady) {
-        setStatus("Indexing…", "amber");
-        return;
-      }
-      const queryText = inputEl.value.trim();
-      if (!queryText) return;
+    async function initViewer() {
+      return new Promise((resolve, reject) => {
+        Autodesk.Viewing.Initializer(
+          { getAccessToken },
+          () => {
+            const div = $("viewer");
+            viewer = new Autodesk.Viewing.GuiViewer3D(div, { extensions: [] });
+            const code = viewer.start();
+            if (code > 0) return reject(new Error("Viewer failed to start."));
+            viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, () => {
+              try {
+                const sel = viewer.getSelection() || [];
+                setSelCount(sel.length);
+              } catch {}
+            });
+            setViewerStatus("Ready");
+            resolve();
+          }
+        );
+      });
+    }
 
-      setStatus("Analyzing…", "blue");
-      askBtn.disabled = true;
+    async function loadModel(urn) {
+      if (!viewer) await initViewer();
+
+      setViewerStatus("Loading...");
+      logStatus("Loading model...");
+
+      // reset cache on new model
+      modelDataCache = [];
+      modelDataBuilt = false;
+      setDataState("not built");
+      setDataCount(0);
+
+      const docId = "urn:" + urn;
+
+      return new Promise((resolve, reject) => {
+        Autodesk.Viewing.Document.load(
+          docId,
+          (doc) => {
+            const defaultGeom = doc.getRoot().getDefaultGeometry();
+            viewer.loadDocumentNode(doc, defaultGeom).then((model) => {
+              currentModel = model;
+              viewer.fitToView();
+              setViewerStatus("Loaded");
+              logStatus("Model loaded. (Optional) Build Model Data for accurate AI answers.");
+              resolve(model);
+            }).catch(reject);
+          },
+          (errCode, errMsg) => {
+            reject(new Error(`Document load failed: ${errCode} ${errMsg || ""}`));
+          }
+        );
+      });
+    }
+
+    // ----------------------------
+    // Extract model data (bulk properties)
+    // ----------------------------
+    function collectLeafDbIds() {
+      return new Promise((resolve, reject) => {
+        const tree = viewer.model.getInstanceTree();
+        if (!tree) return reject(new Error("InstanceTree not available yet."));
+        const rootId = tree.getRootId();
+        const ids = [];
+
+        // DFS
+        const stack = [rootId];
+        while (stack.length) {
+          const id = stack.pop();
+          let childCount = 0;
+          tree.enumNodeChildren(id, (childId) => {
+            childCount++;
+            stack.push(childId);
+          });
+          if (childCount === 0) ids.push(id);
+        }
+        resolve(ids);
+      });
+    }
+
+    async function buildModelData() {
+      if (!viewer || !viewer.model) throw new Error("Load model first.");
+      if (building) return;
+
+      building = true;
+      $("btnBuild").disabled = true;
+      $("btnAsk").disabled = true;
+      $("btnAskSel").disabled = true;
 
       try {
-        const response = await fetch(AI_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text: queryText,
-            modelData: modelIndex
-          })
-        });
+        setDataState("building...");
+        logStatus("Building model data (categories/levels/material/area/volume)...");
+        setViewerStatus("Indexing...");
 
-        const data = await response.json();
-        if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`);
+        const dbIds = await collectLeafDbIds();
 
-        responseBox.classList.remove("hidden");
-        answerEl.textContent = data.answer || "No answer";
+        // properties to request (Viewer will return those that exist)
+        const propNames = [
+          "Category",
+          "Level",
+          "Base Level",
+          "Reference Level",
+          "Material",
+          "Structural Material",
+          "Volume",
+          "Area",
+          "Host Area Computed",
+          "Length",
+          "Type Name",
+          "Family",
+          "Family and Type"
+        ];
 
-        if (Array.isArray(data.dbIds) && data.dbIds.length > 0) {
-          viewer.isolate(data.dbIds);
-          viewer.select(data.dbIds);
-          viewer.fitToView(data.dbIds);
-        } else {
-          viewer.isolate(0);
-          viewer.select([]);
+        // getBulkProperties in chunks
+        const chunkSize = 2000;
+        const out = [];
+        for (let i = 0; i < dbIds.length; i += chunkSize) {
+          const chunk = dbIds.slice(i, i + chunkSize);
+          const rows = await new Promise((resolve, reject) => {
+            viewer.model.getBulkProperties(
+              chunk,
+              { propFilter: propNames, ignoreHidden: true },
+              resolve,
+              reject
+            );
+          });
+
+          for (const r of rows) {
+            const props = r.properties || [];
+            const category = pickProp(props, ["Category"]) ?? "";
+            const level = pickProp(props, ["Level", "Base Level", "Reference Level"]) ?? "";
+            const material = pickProp(props, ["Material", "Structural Material"]) ?? "";
+            const volume = asNumber(pickProp(props, ["Volume"]));
+            const area = asNumber(pickProp(props, ["Area", "Host Area Computed"]));
+
+            // keep only meaningful rows (still okay if blank, but avoid totally empty + invalid dbId)
+            out.push({
+              dbId: r.dbId,
+              category,
+              level,
+              material,
+              area,
+              volume
+            });
+          }
+
+          setDataCount(out.length);
+          logStatus(`Building model data... ${Math.min(i + chunkSize, dbIds.length)}/${dbIds.length}`);
         }
 
-        setStatus("Ready", "green");
-      } catch (err) {
-        console.error(err);
-        responseBox.classList.remove("hidden");
-        answerEl.textContent = "Error: AI request failed.";
-        setStatus("Error", "red");
+        modelDataCache = out;
+        modelDataBuilt = true;
+        setDataState("built");
+        setViewerStatus("Ready");
+        logStatus(`Model data built: ${modelDataCache.length} elements cached.`);
       } finally {
-        askBtn.disabled = false;
+        building = false;
+        $("btnBuild").disabled = false;
+        $("btnAsk").disabled = false;
+        $("btnAskSel").disabled = false;
       }
     }
 
-    // ================= EVENTS =================
-    askBtn.onclick = ask;
+    // ----------------------------
+    // AI call + highlighting
+    // ----------------------------
+    async function callAI(text, selectionDbIds = null) {
+      const url = `${backendBase()}/api/ai`;
 
-    inputEl.onkeydown = (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        ask();
+      // Optional selection narrowing: we still send modelData,
+      // but if selection provided, we can pre-filter client-side to reduce payload.
+      let payloadModelData = modelDataCache;
+
+      if (Array.isArray(selectionDbIds) && selectionDbIds.length > 0) {
+        const set = new Set(selectionDbIds);
+        payloadModelData = modelDataCache.filter(e => set.has(e.dbId));
       }
-    };
 
-    clearBtn.onclick = () => {
-      inputEl.value = "";
-      responseBox.classList.add("hidden");
-      if (viewer) {
-        viewer.isolate(0);
-        viewer.select([]);
-        viewer.fitToView();
+      // If user didn't build cache yet, we still send empty array -> backend returns "Model data missing."
+      if (!modelDataBuilt) payloadModelData = [];
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, modelData: payloadModelData })
+      });
+
+      if (!resp.ok) {
+        const t = await resp.text().catch(() => "");
+        throw new Error(`AI HTTP ${resp.status}: ${t}`);
       }
-    };
+      return resp.json();
+    }
 
-    resetBtn.onclick = () => {
+    function highlightDbIds(dbIds) {
+      if (!viewer || !viewer.model) return;
+      if (!Array.isArray(dbIds) || dbIds.length === 0) {
+        viewer.clearSelection();
+        viewer.isolate(0); // unisolate
+        return;
+      }
+      viewer.isolate(dbIds);
+      viewer.fitToView(dbIds);
+      viewer.setSelection(dbIds);
+    }
+
+    // ----------------------------
+    // UI events
+    // ----------------------------
+    $("btnLoad").addEventListener("click", async () => {
+      const urn = ($("modelUrn").value || "").trim();
+      if (!urn) {
+        alert("Paste your URN (base64) first.");
+        return;
+      }
+      try {
+        await loadModel(urn);
+      } catch (e) {
+        console.error(e);
+        alert(e.message || String(e));
+        setViewerStatus("Error");
+      }
+    });
+
+    $("btnBuild").addEventListener("click", async () => {
+      try {
+        await buildModelData();
+      } catch (e) {
+        console.error(e);
+        alert(e.message || String(e));
+        setDataState("error");
+      }
+    });
+
+    $("btnAsk").addEventListener("click", async () => {
+      const text = ($("prompt").value || "").trim();
+      if (!text) return;
+
+      pushMsg("user", text);
+
+      $("btnAsk").disabled = true;
+      $("btnAskSel").disabled = true;
+      logStatus("Thinking...");
+
+      try {
+        const data = await callAI(text, null);
+        pushMsg("ai", data.answer || "(no answer)");
+
+        // highlight returned dbIds
+        if (Array.isArray(data.dbIds)) highlightDbIds(data.dbIds);
+
+        // show plan (optional, but helpful)
+        if (data.plan) {
+          pushMsg("ai", "Plan:\n" + JSON.stringify(data.plan, null, 2));
+        }
+
+        logStatus("Done.");
+      } catch (e) {
+        console.error(e);
+        pushMsg("ai", "Error: " + (e.message || String(e)));
+        logStatus("Error calling AI.");
+      } finally {
+        $("btnAsk").disabled = false;
+        $("btnAskSel").disabled = false;
+      }
+    });
+
+    $("btnAskSel").addEventListener("click", async () => {
+      const text = ($("prompt").value || "").trim();
+      if (!text) return;
+
+      const sel = (viewer && viewer.getSelection) ? (viewer.getSelection() || []) : [];
+      pushMsg("user", `${text}\n\n(selection: ${sel.length})`);
+
+      $("btnAsk").disabled = true;
+      $("btnAskSel").disabled = true;
+      logStatus("Thinking (selection)...");
+
+      try {
+        const data = await callAI(text, sel);
+        pushMsg("ai", data.answer || "(no answer)");
+
+        if (Array.isArray(data.dbIds)) highlightDbIds(data.dbIds);
+
+        if (data.plan) {
+          pushMsg("ai", "Plan:\n" + JSON.stringify(data.plan, null, 2));
+        }
+
+        logStatus("Done.");
+      } catch (e) {
+        console.error(e);
+        pushMsg("ai", "Error: " + (e.message || String(e)));
+        logStatus("Error calling AI.");
+      } finally {
+        $("btnAsk").disabled = false;
+        $("btnAskSel").disabled = false;
+      }
+    });
+
+    $("btnClear").addEventListener("click", () => {
+      $("chat").innerHTML = "";
+      logStatus("Cleared.");
+    });
+
+    $("btnUnisolate").addEventListener("click", () => {
+      highlightDbIds([]);
+      logStatus("Unisolated.");
+    });
+
+    $("btnFit").addEventListener("click", () => {
       if (!viewer) return;
-      viewer.isolate(0);
-      viewer.select([]);
       viewer.fitToView();
-    };
+    });
 
-    window.onload = initViewer;
+    $("btnReset").addEventListener("click", () => {
+      if (!viewer) return;
+      viewer.clearSelection();
+      viewer.isolate(0);
+      viewer.fitToView();
+      logStatus("Reset view.");
+    });
+
+    // clickable examples
+    document.addEventListener("click", (e) => {
+      const ex = e.target?.getAttribute?.("data-example");
+      if (ex) $("prompt").value = ex;
+    });
+
+    // Auto-init viewer (without loading a model)
+    (async () => {
+      try {
+        setViewerStatus("Initializing...");
+        await initViewer();
+        setViewerStatus("Ready");
+      } catch (e) {
+        console.error(e);
+        setViewerStatus("Error");
+        alert(e.message || String(e));
+      }
+    })();
   </script>
 </body>
 </html>
