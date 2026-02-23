@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AZ | BIM AI Viewer</title>
 
-  <!-- Autodesk Viewer CSS -->
   <link rel="stylesheet"
     href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.108.0/style.min.css" />
   <script src="https://cdn.tailwindcss.com"></script>
@@ -13,7 +12,7 @@
   <style>
     html, body { margin:0; padding:0; height:100%; width:100%; overflow:hidden; background:#f8fafc; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
     #viewer { position:absolute; inset:0; width: 100%; height: 100%; }
-    
+
     .glass {
       background: rgba(255, 255, 255, 0.9);
       backdrop-filter: blur(12px);
@@ -34,18 +33,17 @@
 </head>
 
 <body>
-
   <div id="panel" class="glass">
     <div class="flex justify-between items-center mb-3">
       <div class="flex items-center gap-2">
-        <div class="w-6 h-6 rounded bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">AI</div>
-        <div class="font-bold text-sm text-slate-800">BIM Assistant</div>
+        <div class="w-6 h-6 rounded bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">AZ</div>
+        <div class="font-bold text-sm text-slate-800">AI BIM Assistant</div>
       </div>
-      <div id="status" class="status text-slate-500">Loading...</div>
+      <div id="status" class="status text-slate-500">Loading…</div>
     </div>
 
     <div id="hint" class="text-[11px] text-slate-500 mb-3 bg-slate-50 p-2 rounded border border-slate-100">
-      Initializing Autodesk Viewer...
+      Initializing Autodesk Viewer…
     </div>
 
     <div id="response-box" class="hidden text-xs bg-white border border-slate-100 p-3 rounded-lg mb-3 shadow-sm">
@@ -60,7 +58,7 @@
     <div class="flex gap-2">
       <button id="ask"
         class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-6 py-2 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
-        disabled>Ask AI</button>
+        disabled>Ask</button>
 
       <button id="clear"
         class="bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs px-4 py-2 rounded-lg transition-all border border-slate-200">Clear</button>
@@ -94,12 +92,11 @@
     let modelIndex = [];
     let modelReady = false;
 
-    // Gate indexing until BOTH are ready
     let treeReady = false;
     let geomReady = false;
     let indexingStarted = false;
 
-    // ================= UI ELEMENTS =================
+    // ================= UI =================
     const statusEl = document.getElementById("status");
     const hintEl = document.getElementById("hint");
     const askBtn = document.getElementById("ask");
@@ -114,7 +111,7 @@
       statusEl.className = `status text-${color}-600`;
     }
 
-    // ================= TOKEN MANAGEMENT =================
+    // ================= TOKEN =================
     let tokenCache = null, tokenExpire = 0;
 
     async function getAccessToken(callback) {
@@ -136,7 +133,7 @@
       }
     }
 
-    // ================= VIEWER INITIALIZATION =================
+    // ================= VIEWER =================
     function initViewer() {
       const viewerDiv = document.getElementById("viewer");
 
@@ -144,7 +141,12 @@
         { env: "AutodeskProduction", api: "derivativeV2", getAccessToken },
         () => {
           viewer = new Autodesk.Viewing.GuiViewer3D(viewerDiv);
-          viewer.start();
+          const started = viewer.start();
+          if (started > 0) {
+            setStatus("WebGL Error", "red");
+            hintEl.textContent = "WebGL not supported.";
+            return;
+          }
 
           Autodesk.Viewing.Document.load(documentId, (doc) => {
             const viewable = doc.getRoot().getDefaultGeometry();
@@ -152,7 +154,6 @@
             viewer.loadDocumentNode(doc, viewable).then(() => {
               viewer.setBackgroundColor(248, 250, 252, 248, 250, 252);
 
-              // IMPORTANT: wait for BOTH tree + geometry
               viewer.addEventListener(Autodesk.Viewing.OBJECT_TREE_CREATED_EVENT, () => {
                 treeReady = true;
                 maybeStartIndexing();
@@ -167,8 +168,8 @@
               setStatus("Loading…", "slate");
             });
 
-          }, (err) => {
-            console.error("Load failed", err);
+          }, (errCode) => {
+            console.error("Document load failed:", errCode);
             setStatus("Load Error", "red");
             hintEl.textContent = "Model load failed.";
           });
@@ -179,7 +180,6 @@
     function maybeStartIndexing() {
       if (indexingStarted) return;
       if (!treeReady || !geomReady) return;
-
       indexingStarted = true;
       buildIndex().catch((e) => {
         console.error(e);
@@ -188,72 +188,59 @@
       });
     }
 
-    // ================= LEAF WALKER (SAFE) =================
-    function getLeafDbIds() {
+    // ================= CORRECT: dbIds with FRAGMENTS =================
+    function getDbIdsWithFragments() {
       const tree = viewer.model.getInstanceTree();
       const root = tree.getRootId();
-      const leaves = [];
 
-      function walk(id) {
-        let childCount = 0;
-        tree.enumNodeChildren(id, (child) => {
-          childCount++;
-          walk(child);
-        });
-        if (childCount === 0) leaves.push(id);
+      const all = [];
+      // true = recursive enumeration of all descendants
+      tree.enumNodeChildren(root, (id) => all.push(id), true);
+
+      const fragIds = [];
+      const real = [];
+
+      for (const id of all) {
+        fragIds.length = 0;
+        tree.getNodeFragmentIds(id, fragIds);
+        if (fragIds.length > 0) real.push(id);
       }
 
-      walk(root);
-      return leaves;
+      return real;
     }
 
-    // ================= PROPERTY HELPERS =================
+    // ================= PROPS =================
     function getProp(item, name) {
       const p = item.properties?.find(x => x.displayName === name);
       return p ? p.displayValue : null;
     }
 
-    // More robust numeric parser (handles "1,234.56" and "1 234,56")
     function toNum(v) {
       if (v == null) return 0;
       const s = String(v).trim();
       if (!s) return 0;
 
-      // remove spaces
       let t = s.replace(/\s/g, "");
-
-      // If both comma and dot exist, assume comma is thousands separator: "1,234.56"
-      if (t.includes(",") && t.includes(".")) {
-        t = t.replace(/,/g, "");
-      } else if (t.includes(",") && !t.includes(".")) {
-        // "1234,56" -> decimal comma
-        t = t.replace(",", ".");
-      }
-
+      if (t.includes(",") && t.includes(".")) t = t.replace(/,/g, "");
+      else if (t.includes(",") && !t.includes(".")) t = t.replace(",", ".");
       const n = parseFloat(t);
       return Number.isFinite(n) ? n : 0;
     }
 
-    // ================= BATCHED INDEXING =================
+    // ================= INDEX =================
     async function buildIndex() {
       setStatus("Indexing…", "blue");
-      hintEl.textContent = "Building BIM → JSON index…";
+      hintEl.textContent = "Finding real geometry elements…";
       askBtn.disabled = true;
 
-      const dbIds = getLeafDbIds();
-      console.log("Leaf elements:", dbIds.length);
+      // Important: build from fragment-bearing nodes
+      const dbIds = getDbIdsWithFragments();
+      console.log("Geometry elements (fragments):", dbIds.length);
 
-      if (!dbIds || dbIds.length < 10) {
-        // If leaf count is suspiciously low, the tree may still be incomplete.
-        // Retry once after a short delay.
-        await new Promise(r => setTimeout(r, 600));
-        const retryIds = getLeafDbIds();
-        console.log("Leaf elements (retry):", retryIds.length);
-
-        if (retryIds.length > dbIds.length) {
-          dbIds.length = 0;
-          dbIds.push(...retryIds);
-        }
+      if (!dbIds.length) {
+        setStatus("Index Error", "red");
+        hintEl.textContent = "No geometry elements found. (Model may be 2D or empty)";
+        return;
       }
 
       const wantedProps = [
@@ -298,11 +285,11 @@
 
       modelReady = true;
       setStatus("Ready", "green");
-      hintEl.textContent = `Indexed ${modelIndex.length} elements. BIM Assistant online.`;
+      hintEl.textContent = `Model indexed (${modelIndex.length} elements). Ask a question.`;
       askBtn.disabled = false;
     }
 
-    // ================= AI COMMUNICATION =================
+    // ================= ASK =================
     async function ask() {
       if (!modelReady) {
         setStatus("Indexing…", "amber");
@@ -328,30 +315,29 @@
         if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`);
 
         responseBox.classList.remove("hidden");
-        answerEl.textContent = data.answer || "I couldn't process that request.";
+        answerEl.textContent = data.answer || "No answer";
 
         if (Array.isArray(data.dbIds) && data.dbIds.length > 0) {
           viewer.isolate(data.dbIds);
           viewer.select(data.dbIds);
           viewer.fitToView(data.dbIds);
         } else {
-          // keep full model visible if no matches
           viewer.isolate(0);
           viewer.select([]);
         }
 
         setStatus("Ready", "green");
       } catch (err) {
-        console.error("AI request failed", err);
-        answerEl.textContent = "Error: Could not connect to the AI engine.";
+        console.error(err);
         responseBox.classList.remove("hidden");
+        answerEl.textContent = "Error: AI request failed.";
         setStatus("Error", "red");
       } finally {
         askBtn.disabled = false;
       }
     }
 
-    // ================= EVENT LISTENERS =================
+    // ================= EVENTS =================
     askBtn.onclick = ask;
 
     inputEl.onkeydown = (e) => {
@@ -378,7 +364,6 @@
       viewer.fitToView();
     };
 
-    // ================= START =================
     window.onload = initViewer;
   </script>
 </body>
