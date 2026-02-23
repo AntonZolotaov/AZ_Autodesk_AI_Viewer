@@ -5,563 +5,241 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>APS Viewer + AI BIM Assistant</title>
 
-  <!-- Autodesk APS Viewer -->
-  <link rel="stylesheet" href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css" type="text/css" />
+  <!-- APS Viewer -->
+  <link rel="stylesheet"
+        href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css"/>
   <script src="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.min.js"></script>
 
-  <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <style>
-    :root{
-      --bg: #ffffff;
-      --panel: #ffffff;
-      --muted: #6b7280;
-      --border: #eef0f3;
-      --shadow: 0 2px 10px rgba(0,0,0,.06);
-      --accent: #00bcd4;
-    }
-    body { background: var(--bg); }
-    .card { background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: 16px; }
-    .btn {
-      display:inline-flex; align-items:center; justify-content:center;
-      padding: .6rem .9rem; border-radius: 12px; border: 1px solid var(--border);
-      background: white; font-weight: 600;
-    }
-    .btn-primary{ background: var(--accent); color: white; border-color: transparent; }
-    .btn:disabled{ opacity: .6; cursor: not-allowed; }
-    .chip{ font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
-    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-    #viewer { width: 100%; height: calc(100vh - 24px); min-height: 520px; border-radius: 16px; overflow: hidden; }
-    .msg-user{ background:#f3f4f6; border:1px solid var(--border); }
-    .msg-ai{ background:#ecfeff; border:1px solid #cffafe; }
-    .scrollbar::-webkit-scrollbar { width: 10px; }
-    .scrollbar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+    #viewer { width:100%; height:calc(100vh - 120px); min-height:520px; }
+    .btn { padding:.6rem .9rem; border-radius:10px; font-weight:600; }
+    .btn-primary { background:#00bcd4; color:white; }
   </style>
 </head>
+<body class="bg-gray-50 p-4">
 
-<body class="p-3 md:p-4">
-  <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-4">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-    <!-- LEFT: Viewer -->
-    <div class="lg:col-span-8 card p-2 md:p-3">
-      <div class="flex items-center justify-between gap-2 mb-2 md:mb-3">
-        <div class="flex items-center gap-2">
-          <div class="w-2.5 h-2.5 rounded-full" style="background: var(--accent)"></div>
-          <div class="font-semibold text-slate-900">APS Viewer</div>
-          <span id="viewerStatus" class="chip">Idle</span>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <button id="btnFit" class="btn">Fit</button>
-          <button id="btnReset" class="btn">Reset</button>
-        </div>
-      </div>
-
-      <div id="viewer"></div>
-
-      <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-        <span class="chip">Selection: <span id="selCount">0</span></span>
-        <span class="chip">Model Data: <span id="dataState">not built</span></span>
-        <span class="chip">Elements cached: <span id="dataCount">0</span></span>
-      </div>
+  <!-- Viewer -->
+  <div class="lg:col-span-2 bg-white rounded-xl shadow p-3">
+    <div class="flex justify-between items-center mb-2">
+      <div class="font-semibold">APS Viewer</div>
+      <div id="viewerStatus" class="text-sm text-gray-500">Initializing...</div>
     </div>
-
-    <!-- RIGHT: Controls + AI -->
-    <div class="lg:col-span-4 card p-3 md:p-4 flex flex-col min-h-[520px]">
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <div class="text-lg font-semibold text-slate-900">AI BIM Assistant</div>
-          <div class="text-sm text-slate-500">Ask questions and highlight results in the model.</div>
-        </div>
-        <span class="chip mono">/api/ai</span>
-      </div>
-
-      <!-- Connection / Model -->
-      <div class="mt-4 grid gap-3">
-        <div class="grid gap-2">
-          <label class="text-xs font-semibold text-slate-700">Backend Base URL</label>
-          <input id="backendBase" class="w-full rounded-xl border border-[var(--border)] px-3 py-2 text-sm"
-                 value="https://revit-viewer-backend.onrender.com" />
-          <div class="text-xs text-slate-500">
-            Uses <span class="mono">/api/auth/token</span> and <span class="mono">/api/ai</span> on this backend.
-          </div>
-        </div>
-
-        <div class="grid gap-2">
-          <label class="text-xs font-semibold text-slate-700">Model URN (base64)</label>
-          <input id="modelUrn" class="w-full rounded-xl border border-[var(--border)] px-3 py-2 text-sm mono"
-                 placeholder="Paste your URN here (base64)" />
-          <div class="flex gap-2">
-            <button id="btnLoad" class="btn btn-primary w-full">Load Model</button>
-            <button id="btnBuild" class="btn w-full">Build Model Data</button>
-          </div>
-          <div id="buildHint" class="text-xs text-slate-500">
-            Tip: click <b>Build Model Data</b> once. Then AI answers like “Total concrete volume” will be accurate.
-          </div>
-        </div>
-      </div>
-
-      <!-- AI Chat -->
-      <div class="mt-4 flex-1 flex flex-col min-h-0">
-        <div class="flex items-center justify-between">
-          <div class="text-sm font-semibold text-slate-800">Chat</div>
-          <div class="flex items-center gap-2">
-            <button id="btnClear" class="btn text-sm">Clear</button>
-            <button id="btnUnisolate" class="btn text-sm">Unisolate</button>
-          </div>
-        </div>
-
-        <div id="chat" class="mt-2 flex-1 min-h-0 overflow-auto scrollbar space-y-2 pr-1">
-          <div class="text-xs text-slate-500">
-            Examples:
-            <span class="chip cursor-pointer" data-example="Total concrete volume?">Total concrete volume?</span>
-            <span class="chip cursor-pointer" data-example="How many external doors?">How many external doors?</span>
-            <span class="chip cursor-pointer" data-example="Windows per level">Windows per level</span>
-            <span class="chip cursor-pointer" data-example="Compare window count Level 1 vs Level 2">Compare window count Level 1 vs Level 2</span>
-            <span class="chip cursor-pointer" data-example="Facade area?">Facade area?</span>
-          </div>
-        </div>
-
-        <div class="mt-3 grid gap-2">
-          <textarea id="prompt" rows="2"
-            class="w-full rounded-xl border border-[var(--border)] px-3 py-2 text-sm"
-            placeholder="Ask: e.g. How many windows? Total wall volume? Windows per level?"></textarea>
-
-          <div class="flex gap-2">
-            <button id="btnAsk" class="btn btn-primary w-full">Ask AI</button>
-            <button id="btnAskSel" class="btn w-full">Ask (Selection)</button>
-          </div>
-
-          <div id="aiStatus" class="text-xs text-slate-500">Ready.</div>
-        </div>
-      </div>
-
-    </div>
+    <div id="viewer"></div>
   </div>
 
-  <script>
-    // ----------------------------
-    // Config / state
-    // ----------------------------
-    let viewer = null;
-    let currentModel = null;
+  <!-- Right Panel -->
+  <div class="bg-white rounded-xl shadow p-4 flex flex-col gap-4">
 
-    // Cache of extracted elements for backend to compute accurate answers
-    // Each item: { dbId, category, level, material, area, volume }
-    let modelDataCache = [];
-    let modelDataBuilt = false;
-    let building = false;
+    <div>
+      <div class="font-semibold mb-2">Load Model</div>
+      <input id="urnInput"
+             class="w-full border rounded p-2 text-sm"
+             placeholder="Paste base64 URN here" />
+      <button id="btnLoad"
+              class="btn btn-primary w-full mt-2">
+        Load Model
+      </button>
+    </div>
 
-    const $ = (id) => document.getElementById(id);
+    <div>
+      <div class="font-semibold mb-2">AI BIM Assistant</div>
+      <textarea id="prompt"
+                class="w-full border rounded p-2 text-sm"
+                rows="3"
+                placeholder="How many windows?"></textarea>
 
-    const setViewerStatus = (txt) => $("viewerStatus").textContent = txt;
-    const setDataState = (txt) => $("dataState").textContent = txt;
-    const setDataCount = (n) => $("dataCount").textContent = String(n);
-    const setSelCount = (n) => $("selCount").textContent = String(n);
+      <button id="btnAsk"
+              class="btn btn-primary w-full mt-2">
+        Ask AI
+      </button>
 
-    function backendBase() {
-      return ($("backendBase").value || "").replace(/\/+$/, "");
-    }
+      <div id="aiAnswer"
+           class="mt-3 text-sm text-gray-700 whitespace-pre-wrap"></div>
+    </div>
 
-    function logStatus(msg) {
-      $("aiStatus").textContent = msg;
-    }
+  </div>
+</div>
 
-    function pushMsg(role, text) {
-      const div = document.createElement("div");
-      div.className = `rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${role === "user" ? "msg-user" : "msg-ai"}`;
-      div.innerHTML = `<div class="text-xs font-semibold mb-1 ${role === "user" ? "text-slate-700" : "text-cyan-900"}">${role === "user" ? "You" : "AI"}</div>${escapeHtml(text)}`;
-      $("chat").appendChild(div);
-      $("chat").scrollTop = $("chat").scrollHeight;
-    }
+<script>
+let viewer = null;
+let model = null;
+let modelDataCache = [];
 
-    function escapeHtml(s) {
-      return String(s ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-    }
+// ===============================
+// Backend URL
+// ===============================
+const BACKEND = "https://revit-viewer-backend.onrender.com";
 
-    function pickProp(props, names) {
-      const map = new Map();
-      for (const p of (props || [])) map.set((p.displayName || "").toLowerCase(), p.displayValue);
-      for (const name of names) {
-        const v = map.get(String(name).toLowerCase());
-        if (v != null && v !== "") return v;
-      }
-      return null;
-    }
+// ===============================
+// APS Token
+// ===============================
+async function getAccessToken(onTokenReady) {
+  const res = await fetch(`${BACKEND}/api/auth/token`);
+  if (!res.ok) throw new Error("Token error");
+  const data = await res.json();
+  onTokenReady(data.access_token, data.expires_in);
+}
 
-    function asNumber(v) {
-      if (v == null) return 0;
-      if (typeof v === "number") return Number.isFinite(v) ? v : 0;
-      const s = String(v).replace(",", ".").replace(/[^\d.+-eE]/g, "");
-      const n = parseFloat(s);
-      return Number.isFinite(n) ? n : 0;
-    }
+// ===============================
+// Init Viewer
+// ===============================
+async function initViewer() {
+  return new Promise((resolve, reject) => {
+    Autodesk.Viewing.Initializer({ getAccessToken }, () => {
+      viewer = new Autodesk.Viewing.GuiViewer3D(
+        document.getElementById("viewer")
+      );
+      const code = viewer.start();
+      if (code > 0) reject("Viewer failed to start.");
+      document.getElementById("viewerStatus").innerText = "Ready";
+      resolve();
+    });
+  });
+}
 
-    // ----------------------------
-    // APS Viewer init
-    // ----------------------------
-    async function getAccessToken(onTokenReady) {
-      const url = `${backendBase()}/api/auth/token`;
-      const resp = await fetch(url);
-      if (!resp.ok) {
-        const t = await resp.text().catch(() => "");
-        throw new Error(`Token error: HTTP ${resp.status} ${t}`);
-      }
-      const data = await resp.json();
-      onTokenReady(data.access_token, data.expires_in);
-    }
+// ===============================
+// Load Model
+// ===============================
+async function loadModel(urn) {
+  if (!viewer) await initViewer();
 
-    async function initViewer() {
-      return new Promise((resolve, reject) => {
-        Autodesk.Viewing.Initializer(
-          { getAccessToken },
-          () => {
-            const div = $("viewer");
-            viewer = new Autodesk.Viewing.GuiViewer3D(div, { extensions: [] });
-            const code = viewer.start();
-            if (code > 0) return reject(new Error("Viewer failed to start."));
-            viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, () => {
-              try {
-                const sel = viewer.getSelection() || [];
-                setSelCount(sel.length);
-              } catch {}
-            });
-            setViewerStatus("Ready");
-            resolve();
-          }
-        );
-      });
-    }
+  document.getElementById("viewerStatus").innerText = "Loading...";
 
-    async function loadModel(urn) {
-      if (!viewer) await initViewer();
-
-      setViewerStatus("Loading...");
-      logStatus("Loading model...");
-
-      // reset cache on new model
-      modelDataCache = [];
-      modelDataBuilt = false;
-      setDataState("not built");
-      setDataCount(0);
-
-      const docId = "urn:" + urn;
-
-      return new Promise((resolve, reject) => {
-        Autodesk.Viewing.Document.load(
-          docId,
-          (doc) => {
-            const defaultGeom = doc.getRoot().getDefaultGeometry();
-            viewer.loadDocumentNode(doc, defaultGeom).then((model) => {
-              currentModel = model;
-              viewer.fitToView();
-              setViewerStatus("Loaded");
-              logStatus("Model loaded. (Optional) Build Model Data for accurate AI answers.");
-              resolve(model);
-            }).catch(reject);
-          },
-          (errCode, errMsg) => {
-            reject(new Error(`Document load failed: ${errCode} ${errMsg || ""}`));
-          }
-        );
-      });
-    }
-
-    // ----------------------------
-    // Extract model data (bulk properties)
-    // ----------------------------
-    function collectLeafDbIds() {
-      return new Promise((resolve, reject) => {
-        const tree = viewer.model.getInstanceTree();
-        if (!tree) return reject(new Error("InstanceTree not available yet."));
-        const rootId = tree.getRootId();
-        const ids = [];
-
-        // DFS
-        const stack = [rootId];
-        while (stack.length) {
-          const id = stack.pop();
-          let childCount = 0;
-          tree.enumNodeChildren(id, (childId) => {
-            childCount++;
-            stack.push(childId);
-          });
-          if (childCount === 0) ids.push(id);
+  return new Promise((resolve, reject) => {
+    Autodesk.Viewing.Document.load(
+      "urn:" + urn,
+      doc => {
+        const viewable = doc.getRoot().getDefaultGeometry();
+        if (!viewable) {
+          alert("No geometry found. Make sure model is translated.");
+          return reject();
         }
-        resolve(ids);
-      });
-    }
 
-    async function buildModelData() {
-      if (!viewer || !viewer.model) throw new Error("Load model first.");
-      if (building) return;
+        viewer.loadDocumentNode(doc, viewable).then(m => {
+          model = m;
+          viewer.fitToView();
+          document.getElementById("viewerStatus").innerText = "Loaded";
+          resolve();
+        });
+      },
+      (code, msg) => {
+        alert("Load failed: " + code + " " + msg);
+        reject();
+      }
+    );
+  });
+}
 
-      building = true;
-      $("btnBuild").disabled = true;
-      $("btnAsk").disabled = true;
-      $("btnAskSel").disabled = true;
+// ===============================
+// Extract Model Data
+// ===============================
+async function buildModelData() {
+  if (!model) return;
 
-      try {
-        setDataState("building...");
-        logStatus("Building model data (categories/levels/material/area/volume)...");
-        setViewerStatus("Indexing...");
+  modelDataCache = [];
 
-        const dbIds = await collectLeafDbIds();
+  const tree = model.getInstanceTree();
+  const root = tree.getRootId();
+  const dbIds = [];
 
-        // properties to request (Viewer will return those that exist)
-        const propNames = [
-          "Category",
-          "Level",
-          "Base Level",
-          "Reference Level",
-          "Material",
-          "Structural Material",
-          "Volume",
-          "Area",
-          "Host Area Computed",
-          "Length",
-          "Type Name",
-          "Family",
-          "Family and Type"
-        ];
+  tree.enumNodeChildren(root, function recurse(id) {
+    let childCount = 0;
+    tree.enumNodeChildren(id, child => {
+      childCount++;
+      recurse(child);
+    });
+    if (childCount === 0) dbIds.push(id);
+  });
 
-        // getBulkProperties in chunks
-        const chunkSize = 2000;
-        const out = [];
-        for (let i = 0; i < dbIds.length; i += chunkSize) {
-          const chunk = dbIds.slice(i, i + chunkSize);
-          const rows = await new Promise((resolve, reject) => {
-            viewer.model.getBulkProperties(
-              chunk,
-              { propFilter: propNames, ignoreHidden: true },
-              resolve,
-              reject
-            );
+  await new Promise((resolve, reject) => {
+    model.getBulkProperties(
+      dbIds,
+      { propFilter: ["Category","Level","Material","Area","Volume"] },
+      rows => {
+        rows.forEach(r => {
+          const props = {};
+          r.properties.forEach(p => {
+            props[p.displayName] = p.displayValue;
           });
 
-          for (const r of rows) {
-            const props = r.properties || [];
-            const category = pickProp(props, ["Category"]) ?? "";
-            const level = pickProp(props, ["Level", "Base Level", "Reference Level"]) ?? "";
-            const material = pickProp(props, ["Material", "Structural Material"]) ?? "";
-            const volume = asNumber(pickProp(props, ["Volume"]));
-            const area = asNumber(pickProp(props, ["Area", "Host Area Computed"]));
+          modelDataCache.push({
+            dbId: r.dbId,
+            category: props["Category"] || "",
+            level: props["Level"] || "",
+            material: props["Material"] || "",
+            area: parseFloat(props["Area"]) || 0,
+            volume: parseFloat(props["Volume"]) || 0
+          });
+        });
+        resolve();
+      },
+      reject
+    );
+  });
+}
 
-            out.push({
-              dbId: r.dbId,
-              category,
-              level,
-              material,
-              area,
-              volume
-            });
-          }
+// ===============================
+// Highlight Safe
+// ===============================
+function highlight(dbIds) {
+  const ids = Array.isArray(dbIds)
+    ? dbIds.filter(n => Number.isInteger(n) && n > 0)
+    : [];
 
-          setDataCount(out.length);
-          logStatus(`Building model data... ${Math.min(i + chunkSize, dbIds.length)}/${dbIds.length}`);
-        }
+  if (ids.length === 0) {
+    viewer.clearSelection();
+    viewer.isolate([]);   // NEVER isolate(0)
+    viewer.fitToView();
+    return;
+  }
 
-        modelDataCache = out;
-        modelDataBuilt = true;
-        setDataState("built");
-        setViewerStatus("Ready");
-        logStatus(`Model data built: ${modelDataCache.length} elements cached.`);
-      } finally {
-        building = false;
-        $("btnBuild").disabled = false;
-        $("btnAsk").disabled = false;
-        $("btnAskSel").disabled = false;
-      }
-    }
+  viewer.isolate(ids);
+  viewer.fitToView(ids);
+  viewer.setSelection(ids);
+}
 
-    // ----------------------------
-    // AI call + highlighting (FIXED: no isolate(0), filter invalid dbIds)
-    // ----------------------------
-    async function callAI(text, selectionDbIds = null) {
-      const url = `${backendBase()}/api/ai`;
+// ===============================
+// Ask AI
+// ===============================
+async function askAI(text) {
+  const res = await fetch(`${BACKEND}/api/ai`, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({
+      text,
+      modelData:modelDataCache
+    })
+  });
 
-      let payloadModelData = modelDataCache;
+  const data = await res.json();
+  document.getElementById("aiAnswer").innerText =
+    data.answer || "No answer.";
 
-      // If selection provided, reduce payload
-      if (Array.isArray(selectionDbIds) && selectionDbIds.length > 0) {
-        const set = new Set(selectionDbIds);
-        payloadModelData = modelDataCache.filter(e => set.has(e.dbId));
-      }
+  if (data.dbIds) highlight(data.dbIds);
+}
 
-      // If user didn't build cache yet, send empty
-      if (!modelDataBuilt) payloadModelData = [];
+// ===============================
+// UI Events
+// ===============================
+document.getElementById("btnLoad").onclick = async () => {
+  const urn = document.getElementById("urnInput").value.trim();
+  if (!urn) return alert("Paste URN first.");
+  await loadModel(urn);
+  await buildModelData();
+};
 
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, modelData: payloadModelData })
-      });
+document.getElementById("btnAsk").onclick = async () => {
+  const text = document.getElementById("prompt").value.trim();
+  if (!text) return;
+  await askAI(text);
+};
 
-      if (!resp.ok) {
-        const t = await resp.text().catch(() => "");
-        throw new Error(`AI HTTP ${resp.status}: ${t}`);
-      }
-      return resp.json();
-    }
-
-    function highlightDbIds(dbIds) {
-      if (!viewer || !viewer.model) return;
-
-      const ids = Array.isArray(dbIds)
-        ? dbIds.filter(n => Number.isInteger(n) && n > 0)
-        : [];
-
-      if (ids.length === 0) {
-        viewer.clearSelection();
-        viewer.isolate([]);   // ✅ FIX: not isolate(0)
-        viewer.fitToView();
-        return;
-      }
-
-      viewer.isolate(ids);
-      viewer.fitToView(ids);
-      viewer.setSelection(ids);
-    }
-
-    // ----------------------------
-    // UI events
-    // ----------------------------
-    $("btnLoad").addEventListener("click", async () => {
-      const urn = ($("modelUrn").value || "").trim();
-      if (!urn) {
-        alert("Paste your URN (base64) first.");
-        return;
-      }
-      try {
-        await loadModel(urn);
-      } catch (e) {
-        console.error(e);
-        alert(e.message || String(e));
-        setViewerStatus("Error");
-      }
-    });
-
-    $("btnBuild").addEventListener("click", async () => {
-      try {
-        await buildModelData();
-      } catch (e) {
-        console.error(e);
-        alert(e.message || String(e));
-        setDataState("error");
-      }
-    });
-
-    $("btnAsk").addEventListener("click", async () => {
-      const text = ($("prompt").value || "").trim();
-      if (!text) return;
-
-      pushMsg("user", text);
-
-      $("btnAsk").disabled = true;
-      $("btnAskSel").disabled = true;
-      logStatus("Thinking...");
-
-      try {
-        const data = await callAI(text, null);
-        pushMsg("ai", data.answer || "(no answer)");
-
-        if (Array.isArray(data.dbIds)) highlightDbIds(data.dbIds);
-
-        // optional: show plan
-        if (data.plan) {
-          pushMsg("ai", "Plan:\n" + JSON.stringify(data.plan, null, 2));
-        }
-
-        logStatus("Done.");
-      } catch (e) {
-        console.error(e);
-        pushMsg("ai", "Error: " + (e.message || String(e)));
-        logStatus("Error calling AI.");
-      } finally {
-        $("btnAsk").disabled = false;
-        $("btnAskSel").disabled = false;
-      }
-    });
-
-    $("btnAskSel").addEventListener("click", async () => {
-      const text = ($("prompt").value || "").trim();
-      if (!text) return;
-
-      const sel = (viewer && viewer.getSelection) ? (viewer.getSelection() || []) : [];
-      pushMsg("user", `${text}\n\n(selection: ${sel.length})`);
-
-      $("btnAsk").disabled = true;
-      $("btnAskSel").disabled = true;
-      logStatus("Thinking (selection)...");
-
-      try {
-        const data = await callAI(text, sel);
-        pushMsg("ai", data.answer || "(no answer)");
-
-        if (Array.isArray(data.dbIds)) highlightDbIds(data.dbIds);
-
-        if (data.plan) {
-          pushMsg("ai", "Plan:\n" + JSON.stringify(data.plan, null, 2));
-        }
-
-        logStatus("Done.");
-      } catch (e) {
-        console.error(e);
-        pushMsg("ai", "Error: " + (e.message || String(e)));
-        logStatus("Error calling AI.");
-      } finally {
-        $("btnAsk").disabled = false;
-        $("btnAskSel").disabled = false;
-      }
-    });
-
-    $("btnClear").addEventListener("click", () => {
-      $("chat").innerHTML = "";
-      logStatus("Cleared.");
-    });
-
-    $("btnUnisolate").addEventListener("click", () => {
-      highlightDbIds([]);
-      logStatus("Unisolated.");
-    });
-
-    $("btnFit").addEventListener("click", () => {
-      if (!viewer) return;
-      viewer.fitToView();
-    });
-
-    $("btnReset").addEventListener("click", () => {
-      if (!viewer) return;
-      viewer.clearSelection();
-      viewer.isolate([]);   // ✅ FIX: not isolate(0)
-      viewer.fitToView();
-      logStatus("Reset view.");
-    });
-
-    // clickable examples
-    document.addEventListener("click", (e) => {
-      const ex = e.target?.getAttribute?.("data-example");
-      if (ex) $("prompt").value = ex;
-    });
-
-    // Auto-init viewer (without loading a model)
-    (async () => {
-      try {
-        setViewerStatus("Initializing...");
-        await initViewer();
-        setViewerStatus("Ready");
-      } catch (e) {
-        console.error(e);
-        setViewerStatus("Error");
-        alert(e.message || String(e));
-      }
-    })();
-  </script>
+// Auto init
+initViewer();
+</script>
 </body>
 </html>
