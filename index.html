@@ -353,7 +353,6 @@
             const volume = asNumber(pickProp(props, ["Volume"]));
             const area = asNumber(pickProp(props, ["Area", "Host Area Computed"]));
 
-            // keep only meaningful rows (still okay if blank, but avoid totally empty + invalid dbId)
             out.push({
               dbId: r.dbId,
               category,
@@ -382,21 +381,20 @@
     }
 
     // ----------------------------
-    // AI call + highlighting
+    // AI call + highlighting (FIXED: no isolate(0), filter invalid dbIds)
     // ----------------------------
     async function callAI(text, selectionDbIds = null) {
       const url = `${backendBase()}/api/ai`;
 
-      // Optional selection narrowing: we still send modelData,
-      // but if selection provided, we can pre-filter client-side to reduce payload.
       let payloadModelData = modelDataCache;
 
+      // If selection provided, reduce payload
       if (Array.isArray(selectionDbIds) && selectionDbIds.length > 0) {
         const set = new Set(selectionDbIds);
         payloadModelData = modelDataCache.filter(e => set.has(e.dbId));
       }
 
-      // If user didn't build cache yet, we still send empty array -> backend returns "Model data missing."
+      // If user didn't build cache yet, send empty
       if (!modelDataBuilt) payloadModelData = [];
 
       const resp = await fetch(url, {
@@ -414,14 +412,21 @@
 
     function highlightDbIds(dbIds) {
       if (!viewer || !viewer.model) return;
-      if (!Array.isArray(dbIds) || dbIds.length === 0) {
+
+      const ids = Array.isArray(dbIds)
+        ? dbIds.filter(n => Number.isInteger(n) && n > 0)
+        : [];
+
+      if (ids.length === 0) {
         viewer.clearSelection();
-        viewer.isolate(0); // unisolate
+        viewer.isolate([]);   // ✅ FIX: not isolate(0)
+        viewer.fitToView();
         return;
       }
-      viewer.isolate(dbIds);
-      viewer.fitToView(dbIds);
-      viewer.setSelection(dbIds);
+
+      viewer.isolate(ids);
+      viewer.fitToView(ids);
+      viewer.setSelection(ids);
     }
 
     // ----------------------------
@@ -466,10 +471,9 @@
         const data = await callAI(text, null);
         pushMsg("ai", data.answer || "(no answer)");
 
-        // highlight returned dbIds
         if (Array.isArray(data.dbIds)) highlightDbIds(data.dbIds);
 
-        // show plan (optional, but helpful)
+        // optional: show plan
         if (data.plan) {
           pushMsg("ai", "Plan:\n" + JSON.stringify(data.plan, null, 2));
         }
@@ -535,7 +539,7 @@
     $("btnReset").addEventListener("click", () => {
       if (!viewer) return;
       viewer.clearSelection();
-      viewer.isolate(0);
+      viewer.isolate([]);   // ✅ FIX: not isolate(0)
       viewer.fitToView();
       logStatus("Reset view.");
     });
