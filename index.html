@@ -3,54 +3,57 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>AZ | Autodesk 3D Viewer</title>
+<title>AZ | Autodesk Viewer</title>
 
-<link rel="stylesheet" href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.108.0/style.min.css"/>
+<link rel="stylesheet"
+href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.108.0/style.min.css"/>
 <script src="https://cdn.tailwindcss.com"></script>
 
 <style>
 body,html{margin:0;padding:0;height:100%;width:100%;overflow:hidden;background:#f8fafc;font-family:Inter,sans-serif}
-#viewer-container{width:100%;height:100%;position:relative}
-#forgeViewer{width:100%;height:100%;position:absolute;top:0;left:0}
-.glass-panel{background:rgba(255,255,255,.8);backdrop-filter:blur(12px);border:1px solid rgba(0,0,0,.05);border-radius:12px}
-#ai-panel{position:absolute;top:20px;right:20px;width:320px;max-height:85vh;z-index:20;display:flex;flex-direction:column;gap:12px;padding:16px}
+#forgeViewer{position:absolute;top:0;left:0;width:100%;height:100%}
+#ai-panel{position:absolute;top:20px;right:20px;width:320px;background:rgba(255,255,255,.9);
+backdrop-filter:blur(12px);border-radius:12px;padding:16px;z-index:20}
 .status-text{font-size:11px;font-weight:500}
 </style>
 </head>
 
 <body>
-<div id="viewer-container">
-<div id="ai-panel" class="glass-panel shadow-xl">
-<div class="flex justify-between items-center border-b pb-2">
+
+<div id="ai-panel" class="shadow-xl">
+<div class="flex justify-between items-center mb-2">
 <h3 class="font-bold text-sm">AI BIM Assistant</h3>
-<span id="ai-status" class="status-text text-slate-500">Ready</span>
+<span id="ai-status" class="status-text text-slate-500">Loading...</span>
 </div>
 
-<div id="ai-response-area" class="hidden text-xs bg-white/50 rounded p-3">
+<div id="ai-response-area" class="hidden text-xs bg-white rounded p-3 mb-2">
 <div id="ai-answer"></div>
 </div>
 
-<textarea id="ai-input" class="w-full text-xs p-3 rounded border"
-rows="3" placeholder="Ask about quantities..."></textarea>
+<textarea id="ai-input" class="w-full text-xs p-2 border rounded mb-2"
+rows="3" placeholder="Ask about model quantities..."></textarea>
 
 <div class="flex gap-2">
-<button id="btn-ask" class="bg-blue-600 text-white text-xs px-4 py-2 rounded">Ask</button>
-<button id="btn-clear" class="text-xs px-3 py-2">Clear</button>
+<button id="btn-ask"
+class="bg-blue-600 text-white text-xs px-4 py-2 rounded disabled:opacity-40"
+disabled>Ask</button>
+
+<button id="btn-clear"
+class="text-xs px-3 py-2">Clear</button>
 </div>
 </div>
 
 <div id="forgeViewer"></div>
-</div>
 
 <script src="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.108.0/viewer3D.min.js"></script>
 
 <script>
-// ================== CONFIG ==================
-const BACKEND_BASE = "https://revit-viewer-backend.onrender.com";
-const AI_URL = `${BACKEND_BASE}/api/ai`;
-const TOKEN_URL = `${BACKEND_BASE}/api/auth/token`;
-const MODEL_URN = "dXJuOmFkc2sub2JqZWN0czpvcy5vYmplY3Q6YW50b25yZXZpdGJ1Y2tldDIwMjYvYnJ6MDAxLmR3Zng";
-const documentId = `urn:${MODEL_URN}`;
+// ================= CONFIG =================
+const BACKEND_BASE="https://revit-viewer-backend.onrender.com";
+const AI_URL=`${BACKEND_BASE}/api/ai`;
+const TOKEN_URL=`${BACKEND_BASE}/api/auth/token`;
+const MODEL_URN="dXJuOmFkc2sub2JqZWN0czpvcy5vYmplY3Q6YW50b25yZXZpdGJ1Y2tldDIwMjYvYnJ6MDAxLmR3Zng";
+const documentId=`urn:${MODEL_URN}`;
 
 let viewer=null;
 let modelIndex=null;
@@ -58,7 +61,7 @@ let modelIndexed=false;
 let cachedToken=null;
 let cachedExpiry=0;
 
-// ================== TOKEN ==================
+// ================= TOKEN =================
 async function fetchToken(){
 const res=await fetch(TOKEN_URL);
 const data=await res.json();
@@ -71,19 +74,19 @@ if(cachedToken&&Date.now()<cachedExpiry){cb(cachedToken,3600);}
 else fetchToken().then(d=>cb(d.access_token,d.expires_in));
 }
 
-// ================== VIEWER ==================
+// ================= VIEWER =================
 function initViewer(){
-const htmlDiv=document.getElementById('forgeViewer');
 const options={env:'AutodeskProduction',api:'derivativeV2',getAccessToken};
 
 Autodesk.Viewing.Initializer(options,()=>{
-viewer=new Autodesk.Viewing.GuiViewer3D(htmlDiv);
+viewer=new Autodesk.Viewing.GuiViewer3D(document.getElementById("forgeViewer"));
 viewer.start();
 
-Autodesk.Viewing.Document.load(documentId,doc=>{
+Autodesk.Viewing.Document.load(documentId,(doc)=>{
 const viewable=doc.getRoot().getDefaultGeometry();
 viewer.loadDocumentNode(doc,viewable).then(()=>{
 viewer.setBackgroundColor(248,250,252,248,250,252);
+
 viewer.addEventListener(
 Autodesk.Viewing.GEOMETRY_LOADED_EVENT,
 ()=>buildModelIndex()
@@ -93,7 +96,7 @@ Autodesk.Viewing.GEOMETRY_LOADED_EVENT,
 });
 }
 
-// ================== BIM INDEX ==================
+// ================= INDEXING =================
 function getProp(item,name){
 const p=item.properties?.find(x=>x.displayName===name);
 return p?p.displayValue:null;
@@ -105,8 +108,10 @@ return Number.isFinite(n)?n:0;
 }
 
 async function buildModelIndex(){
-if(modelIndexed||!viewer)return;
+if(modelIndexed)return;
+
 setStatus("Indexing model...","blue");
+document.getElementById("btn-ask").disabled=true;
 
 const tree=viewer.model.getInstanceTree();
 const root=tree.getRootId();
@@ -119,8 +124,10 @@ ids.push(id);
 tree.enumNodeChildren(id,child=>stack.push(child));
 }
 
-const wanted=["Category","Level","Base Level","Reference Level",
-"Family and Type","Type Name","Area","Volume","Material"];
+const wanted=[
+"Category","Level","Base Level","Reference Level",
+"Area","Volume","Material"
+];
 
 const batchSize=2000;
 const index=[];
@@ -139,7 +146,6 @@ getProp(item,"Reference Level");
 
 index.push({
 dbId:item.dbId,
-name:item.name,
 category:getProp(item,"Category"),
 level:level,
 area:toNumber(getProp(item,"Area")),
@@ -151,13 +157,20 @@ material:getProp(item,"Material")
 
 modelIndex=index;
 modelIndexed=true;
+
 setStatus(`Model indexed (${index.length})`,"green");
+document.getElementById("btn-ask").disabled=false;
 }
 
-// ================== ASK AI ==================
+// ================= ASK =================
 async function handleAsk(){
 const text=document.getElementById("ai-input").value.trim();
-if(!text||!modelIndex)return;
+if(!text)return;
+
+if(!modelIndexed){
+setStatus("Model still indexing...","amber");
+return;
+}
 
 setStatus("Processing...","blue");
 
@@ -181,7 +194,7 @@ viewer.fitToView(data.dbIds);
 setStatus("Ready","gray");
 }
 
-// ================== UI ==================
+// ================= UI =================
 function setStatus(text,color){
 const el=document.getElementById("ai-status");
 el.innerText=text;
