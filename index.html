@@ -160,7 +160,7 @@
           <h3 class="font-bold text-xs uppercase text-slate-400 tracking-widest">AI Assistant</h3>
           <div class="flex items-center gap-4">
             <button id="btnClear" class="text-[10px] font-bold text-slate-300 hover:text-red-400 uppercase">Clear</button>
-            <span class="text-[10px] font-bold text-slate-300">v2.9.8</span>
+            <span class="text-[10px] font-bold text-slate-300">v3.0.0</span>
           </div>
         </div>
 
@@ -211,16 +211,26 @@
     async function getAccessToken(onTokenReady) {
       try {
         const resp = await fetch(`${backendBase()}/api/auth/token`);
+        if (!resp.ok) throw new Error('Token fetch failed');
         const data = await resp.json();
         onTokenReady(data.access_token, data.expires_in);
-      } catch (err) { updateStatus("Error", "bg-red-500"); }
+      } catch (err) { 
+        updateStatus("Error", "bg-red-500");
+        console.error("Auth error:", err);
+      }
     }
 
     function initViewer() {
       return new Promise((resolve, reject) => {
-        if (viewer) { viewer.finish(); viewer = null; }
+        // Dispose any existing viewer to prevent memory leaks and resize errors
+        if (viewer) {
+          viewer.finish();
+          viewer = null;
+        }
+
         const container = $("viewer");
-        if (container.clientWidth === 0) {
+        // Ensure container is ready before starting
+        if (!container || container.clientWidth === 0) {
             setTimeout(() => initViewer().then(resolve), 300);
             return;
         }
@@ -230,9 +240,12 @@
           viewer = new Autodesk.Viewing.GuiViewer3D($("viewer"));
           viewer.start();
           viewer.setTheme("light-theme");
+          
+          // Selection handler
           viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, () => {
             $("selCount").textContent = (viewer.getSelection() || []).length;
           });
+
           resolve();
         });
       });
@@ -248,9 +261,11 @@
         Autodesk.Viewing.Document.load(documentId, (doc) => {
             const viewable = doc.getRoot().getDefaultGeometry();
             viewer.loadDocumentNode(doc, viewable).then(() => {
+              // Wait for geometry to be indexed by viewer
               viewer.addEventListener(Autodesk.Viewing.OBJECT_TREE_CREATED_EVENT, () => {
                   updateStatus("Ready", "bg-green-500");
                   $("viewerOverlay").classList.add("hidden");
+                  // Start AI Indexing automatically
                   buildIndex();
               }, { once: true });
             });
@@ -259,7 +274,9 @@
               pushMsg("ai", "<b>Load Error:</b> Authentication or URN invalid.");
           }
         );
-      } catch (e) { updateStatus("Error", "bg-red-500"); }
+      } catch (e) { 
+        updateStatus("Error", "bg-red-500"); 
+      }
     }
 
     async function buildIndex() {
@@ -268,7 +285,11 @@
       updateStatus("Indexing", "bg-cyan-500 animate-pulse");
 
       const tree = viewer.model.getInstanceTree();
-      if (!tree) { isBuilding = false; return; }
+      if (!tree) { 
+        isBuilding = false; 
+        updateStatus("Ready", "bg-green-500");
+        return; 
+      }
       
       const allIds = [];
       const crawl = (id) => {
@@ -277,6 +298,7 @@
       };
       crawl(tree.getRootId());
 
+      // Filter for actual geometry (leaf nodes)
       const leafIds = allIds.filter(id => {
         let hasFrag = false;
         tree.enumNodeFragments(id, () => { hasFrag = true; }, false);
@@ -287,15 +309,22 @@
       const results = [];
       const stats = {};
 
+      // Batch process properties for speed
       for (let i = 0; i < leafIds.length; i += chunkSize) {
         const chunk = leafIds.slice(i, i + chunkSize);
         const props = await new Promise(res => viewer.model.getBulkProperties(chunk, null, res));
+        
         for (const item of props) {
           const p = item.properties || [];
           const cat = p.find(x => x.displayName.toLowerCase().includes("category"))?.displayValue || "Other";
+          
           stats[cat] = (stats[cat] || 0) + 1;
           const allVals = p.map(x => String(x.displayValue)).join(" ");
-          results.push({ dbId: item.dbId, searchBlob: `${cat} ${item.name} ${allVals}`.toLowerCase() });
+          
+          results.push({ 
+            dbId: item.dbId, 
+            searchBlob: `${cat} ${item.name} ${allVals}`.toLowerCase() 
+          });
         }
         $("dataCount").textContent = results.length;
       }
@@ -305,38 +334,60 @@
       $("btnAsk").disabled = false;
       updateStatus("Ready", "bg-green-500");
       
-      const topCats = Object.entries(stats).sort((a,b) => b[1]-a[1]).slice(0, 5).map(c => `• ${c[0]} (${c[1]})`).join("<br>");
+      const topCats = Object.entries(stats)
+        .sort((a,b) => b[1]-a[1])
+        .slice(0, 5)
+        .map(c => `• ${c[0]} (${c[1]})`)
+        .join("<br>");
+
       pushMsg("ai", `<b>Auto-Indexing Complete</b><br>BIM data successfully cached (${results.length} items).<br><br><b>Primary Components:</b><br>${topCats}`);
     }
 
     async function askAI() {
       const queryText = $("prompt").value.trim().toLowerCase();
       if (!queryText || !modelDataCache.length) return;
+      
       pushMsg("user", queryText);
       $("prompt").value = "";
 
-      let targetIds = modelDataCache.filter(item => item.searchBlob.includes(queryText)).map(i => i.dbId);
+      // Simple keyword match against the indexed blob
+      let targetIds = modelDataCache
+        .filter(item => item.searchBlob.includes(queryText))
+        .map(i => i.dbId);
 
       if (targetIds.length > 0) {
           pushMsg("ai", `Showing <b>${targetIds.length}</b> matches.`);
           viewer.isolate(targetIds);
           viewer.fitToView(targetIds);
       } else {
-          pushMsg("ai", "No matches found. Try category names like 'Wall' or 'Door'.");
+          pushMsg("ai", "No exact matches found. Try category names like 'Wall', 'Door', or 'Window'.");
       }
     }
 
+    // Event Listeners
     $("btnAsk").onclick = askAI;
     $("btnFit").onclick = () => viewer.fitToView();
-    $("btnReset").onclick = () => { viewer.isolate([]); viewer.fitToView(); viewer.setSelection([]); };
-    $("btnClear").onclick = () => $("chat").innerHTML = "";
+    $("btnReset").onclick = () => { 
+      viewer.isolate([]); 
+      viewer.fitToView(); 
+      viewer.setSelection([]); 
+    };
+    $("btnClear").onclick = () => {
+      $("chat").innerHTML = `
+        <div class="p-4 rounded-xl bg-slate-50 border border-slate-100 text-slate-500 text-[12px] leading-relaxed">
+          Chat cleared. BIM engine index is still active.
+        </div>
+      `;
+    };
 
+    // Initialize on window load
     window.addEventListener('load', () => {
-        initViewer().then(() => loadModel(defaultUrn));
+      initViewer().then(() => loadModel(defaultUrn));
     });
 
+    // Handle viewport resize
     window.addEventListener('resize', () => {
-        if (viewer && viewer.impl) viewer.resize();
+      if (viewer && viewer.impl) viewer.resize();
     });
   </script>
 </body>
